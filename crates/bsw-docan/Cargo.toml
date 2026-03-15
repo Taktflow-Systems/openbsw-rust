@@ -1,0 +1,16 @@
+[package]
+name = "bsw-docan"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "ISO-TP (ISO 15765) transport protocol for CAN — Rust port of OpenBSW docan"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+bsw-transport = { path = "../bsw-transport", default-features = false }
+
+[lints]
+workspace = true

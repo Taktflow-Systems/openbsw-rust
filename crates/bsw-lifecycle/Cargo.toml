@@ -1,0 +1,10 @@
+[package]
+name = "bsw-lifecycle"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Component lifecycle management for embedded BSW — Rust port of OpenBSW lifecycle"
+
+[features]
+default = ["std"]
+std = []

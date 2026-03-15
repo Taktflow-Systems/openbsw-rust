@@ -1,0 +1,10 @@
+[package]
+name = "bsw-io"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "I/O abstractions for embedded BSW — Rust port of OpenBSW io"
+
+[features]
+default = ["std"]
+std = []

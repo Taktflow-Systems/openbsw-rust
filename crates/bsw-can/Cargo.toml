@@ -1,0 +1,17 @@
+[package]
+name = "bsw-can"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "CAN bus abstraction for embedded BSW — Rust port of OpenBSW cpp2can"
+
+[features]
+default = ["std"]
+std = []
+can-fd = []
+
+[dependencies]
+bsw-estd = { path = "../bsw-estd", default-features = false }
+
+[lints]
+workspace = true

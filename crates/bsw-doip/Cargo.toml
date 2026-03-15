@@ -1,0 +1,17 @@
+[package]
+name = "bsw-doip"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "DoIP (ISO 13400) diagnostics over IP — Rust port of OpenBSW doip"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+bsw-ethernet = { path = "../bsw-ethernet", default-features = false }
+bsw-transport = { path = "../bsw-transport", default-features = false }
+
+[lints]
+workspace = true

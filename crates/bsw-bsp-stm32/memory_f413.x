@@ -1,0 +1,9 @@
+/* STM32F413ZH — 1.5 MB Flash, 320 KB SRAM */
+MEMORY
+{
+    FLASH  (rx)  : ORIGIN = 0x08000000, LENGTH = 1536K
+    RAM    (rwx) : ORIGIN = 0x20000000, LENGTH = 319K
+    NOINIT (rwx) : ORIGIN = 0x2004FC00, LENGTH = 1K
+}
+
+_noinit_start = ORIGIN(NOINIT);

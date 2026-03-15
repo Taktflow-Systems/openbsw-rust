@@ -1,0 +1,9 @@
+/* STM32G474RE — 512 KB Flash, 128 KB SRAM */
+MEMORY
+{
+    FLASH  (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
+    RAM    (rwx) : ORIGIN = 0x20000000, LENGTH = 127K
+    NOINIT (rwx) : ORIGIN = 0x2001FC00, LENGTH = 1K
+}
+
+_noinit_start = ORIGIN(NOINIT);

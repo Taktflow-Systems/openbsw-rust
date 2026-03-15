@@ -1,0 +1,14 @@
+[package]
+name = "bsw-ethernet"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Ethernet/TCP/UDP abstraction for embedded BSW — Rust port of OpenBSW cpp2ethernet"
+
+[features]
+default = ["std"]
+std = []
+ipv6 = []
+
+[lints]
+workspace = true

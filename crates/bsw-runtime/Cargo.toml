@@ -1,0 +1,10 @@
+[package]
+name = "bsw-runtime"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Runtime statistics and execution monitoring for embedded BSW — Rust port of OpenBSW runtime"
+
+[features]
+default = ["std"]
+std = []

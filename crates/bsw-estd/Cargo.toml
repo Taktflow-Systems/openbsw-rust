@@ -1,0 +1,10 @@
+[package]
+name = "bsw-estd"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Fixed-capacity containers for embedded BSW — Rust port of OpenBSW estd"
+
+[features]
+default = ["std"]
+std = []

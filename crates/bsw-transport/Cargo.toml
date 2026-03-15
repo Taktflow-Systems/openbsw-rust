@@ -1,0 +1,10 @@
+[package]
+name = "bsw-transport"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Transport message abstraction for embedded BSW — Rust port of OpenBSW transport"
+
+[features]
+default = ["std"]
+std = []
