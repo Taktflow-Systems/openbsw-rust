@@ -87,6 +87,7 @@ use bsw_bsp_stm32::clock_g4::configure_clocks_g474;
 use bsw_bsp_stm32::timer::DwtTimer;
 use bsw_bsp_stm32::uart_g4::PolledUart;
 use bsw_bsp_stm32::can_fdcan::FdCanTransceiver;
+use bsw_can::transceiver::CanTransceiver as _;
 use bsw_bsp_stm32::diag_can::DiagCanTransport;
 
 use bsw_lifecycle::LifecycleComponent as _;
@@ -405,12 +406,38 @@ fn main() -> ! {
     let mut last_heartbeat = timer.system_time_us_64();
     let mut tick: u32 = 0;
 
+    // Heartbeat: cyclic CAN frame every 100 ms
+    // CAN ID 0x010 = CVC/FZC heartbeat (matches production firmware)
+    const HEARTBEAT_CAN_ID: u32 = 0x010;
+    const HEARTBEAT_PERIOD_US: u64 = 100_000; // 100 ms
+    let mut heartbeat_counter: u8 = 0;
+    let mut last_hb_tx = timer.system_time_us_64();
+    // RX heartbeat monitoring from other ECU
+    const PEER_HEARTBEAT_ID: u32 = 0x011; // Other ECU's heartbeat
+    const PEER_TIMEOUT_US: u64 = 500_000; // 500 ms timeout
+    let mut last_peer_hb = timer.system_time_us_64();
+    let mut peer_alive = false;
+
     loop {
         // ── Step 0: Drain FDCAN1 hardware RX FIFO into software buffer ──
-        // Without this, FdCanTransceiver::receive() always returns None
-        // because the software ring-buffer is only filled by isr_rx_fifo0().
-        // In polling mode (no ISR), we must call this manually each loop.
         unsafe { transport.transceiver_mut().isr_rx_fifo0() };
+
+        // ── Step 0b: Heartbeat TX — send alive frame every 100 ms ───────
+        let now_hb = timer.system_time_us_64();
+        let delta = now_hb.wrapping_sub(last_hb_tx);
+        if delta >= HEARTBEAT_PERIOD_US {
+            last_hb_tx = now_hb;
+            let hb_data = [heartbeat_counter, 0x01, 0x00, 0x00]; // counter + status=running
+            let hb_frame = bsw_can::frame::CanFrame::with_data(
+                bsw_can::can_id::CanId::base(HEARTBEAT_CAN_ID as u16),
+                &hb_data,
+            );
+            let ec = transport.transceiver_mut().write(&hb_frame);
+            // Heartbeat TX fires — frame queued to FDCAN.
+            // Note: if FDCAN is in bus-off, write() returns Ok but frame won't
+            // actually transmit. The bus-off recovery in poll() handles this.
+            heartbeat_counter = heartbeat_counter.wrapping_add(1);
+        }
 
         // ── Step 1: Drive the transport (ISO-TP + UDS) ─────────────────
         transport.poll();
