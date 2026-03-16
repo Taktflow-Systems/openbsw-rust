@@ -17,5 +17,6 @@
 
 pub mod buddy;
 pub mod crc;
+pub mod e2e;
 pub mod moving_average;
 pub mod spsc;

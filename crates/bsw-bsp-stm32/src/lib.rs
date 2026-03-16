@@ -10,6 +10,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 // Shared Cortex-M modules (no chip dependency)
+pub mod can_isr;
 pub mod diag_can;
 #[cfg(target_arch = "arm")]
 pub mod fault;
