@@ -6,12 +6,14 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod dem;
 pub mod diag_job;
 pub mod nrc;
 pub mod service_id;
 pub mod services;
 pub mod session;
 
+pub use dem::DemManager;
 pub use diag_job::{DiagJob, DiagResult, DiagRouter};
 pub use nrc::Nrc;
 pub use service_id::ServiceId;
