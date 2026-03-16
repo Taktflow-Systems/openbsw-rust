@@ -8,19 +8,35 @@
 //! dependency but is not used here because it does not expose the message-RAM
 //! layout or the accept-all filter configuration path required by OpenBSW.
 //!
+//! # STM32G4-specific FDCAN differences
+//!
+//! This driver uses STM32G4-specific FDCAN register offsets, which differ
+//! from the generic Bosch M_CAN IP used in other MCU families:
+//!
+//! - RXF0S is at 0x090 (not 0x0A4), RXF0A at 0x094 (not 0x0A8).
+//! - TXBC is at 0x0C0 (not 0x0C4), TXFQS at 0x0C4 (not 0x0C8),
+//!   TXBAR at 0x0CC (not 0x0D0).
+//! - Registers SIDFC, XIDFC, RXF0C, RXF1C, and TXEFC do not exist on
+//!   STM32G4; the MRAM layout is fixed in hardware and configured solely
+//!   via TXBC (TX buffer start/count) and RXGFC (filter policy).
+//! - RX FIFO and TX buffer elements on STM32G4 are 18 words (72 bytes) each,
+//!   not 4 words (16 bytes) as in classic M_CAN.
+//! - RXF0S fill-level field is 4 bits [3:0]; get-index is 2 bits [9:8].
+//! - TXFQS put-index field is 2 bits [9:8] (max 3 elements).
+//!
 //! # Message RAM layout (FDCAN1, SRAMCAN base 0x4000_A400)
 //!
 //! | Section         | Offset  | Elements | Words each | Total   |
 //! |-----------------|---------|----------|------------|---------|
 //! | Std ID filters  | 0x000   | 28       | 1          | 28 W    |
 //! | Ext ID filters  | 0x070   | 8        | 2          | 16 W    |
-//! | RX FIFO 0       | 0x0B0   | 3        | 4          | 12 W    |
-//! | RX FIFO 1       | 0x0E0   | 3        | 4          | 12 W    |
-//! | TX event FIFO   | 0x110   | 3        | 2          | 6 W     |
-//! | TX buffers      | 0x128   | 3        | 4          | 12 W    |
+//! | RX FIFO 0       | 0x0B0   | 3        | 18         | 54 W    |
+//! | RX FIFO 1       | 0x188   | 3        | 18         | 54 W    |
+//! | TX event FIFO   | 0x260   | 3        | 2          | 6 W     |
+//! | TX buffers      | 0x278   | 3        | 18         | 54 W    |
 //!
 //! All offsets are byte offsets from `SRAMCAN_BASE`.
-//! Element size = 4 words = 16 bytes for classic CAN (DLC ≤ 8).
+//! Element stride = 18 words = 72 bytes (STM32G4 FDCAN element size).
 //!
 //! # Bit timing for 500 kbit/s @ 170 MHz
 //!
@@ -68,33 +84,39 @@ const SRAMCAN_BASE: usize = 0x4000_A400;
 
 const FDCAN_CCCR_OFFSET: usize = 0x018; // CC control register
 const FDCAN_NBTP_OFFSET: usize = 0x01C; // Nominal bit timing
-const FDCAN_RXGFC_OFFSET: usize = 0x080; // Global filter config
-const FDCAN_TXBC_OFFSET: usize = 0x0C4; // TX buffer config
-const FDCAN_TXFQS_OFFSET: usize = 0x0C8; // TX FIFO/queue status
-const FDCAN_TXBAR_OFFSET: usize = 0x0D0; // TX buffer add request
+const FDCAN_RXGFC_OFFSET: usize = 0x080; // Global filter config (STM32G4: replaces SIDFC/XIDFC/RXF0C/RXF1C)
+const FDCAN_RXF0S_OFFSET: usize = 0x090; // RX FIFO 0 status       (STM32G4: 0x090, not 0x0A4)
+const FDCAN_RXF0A_OFFSET: usize = 0x094; // RX FIFO 0 acknowledge  (STM32G4: 0x094, not 0x0A8)
+const FDCAN_TXBC_OFFSET:  usize = 0x0C0; // TX buffer config        (STM32G4: 0x0C0, not 0x0C4)
+const FDCAN_TXFQS_OFFSET: usize = 0x0C4; // TX FIFO/queue status    (STM32G4: 0x0C4, not 0x0C8)
+const FDCAN_TXBAR_OFFSET: usize = 0x0CC; // TX buffer add request   (STM32G4: 0x0CC, not 0x0D0)
 const FDCAN_IR_OFFSET: usize = 0x050;   // Interrupt register
 const FDCAN_IE_OFFSET: usize = 0x054;   // Interrupt enable
 const FDCAN_ILS_OFFSET: usize = 0x058;  // Interrupt line select
 const FDCAN_ILE_OFFSET: usize = 0x05C;  // Interrupt line enable
-const FDCAN_RXF0S_OFFSET: usize = 0x0A4; // RX FIFO 0 status
-const FDCAN_RXF0A_OFFSET: usize = 0x0A8; // RX FIFO 0 acknowledge
 const FDCAN_PSR_OFFSET: usize = 0x044;  // Protocol status register
-const FDCAN_SIDFC_OFFSET: usize = 0x084; // Std ID filter config
-const FDCAN_XIDFC_OFFSET: usize = 0x088; // Ext ID filter config
-const FDCAN_RXF0C_OFFSET: usize = 0x0A0; // RX FIFO 0 config
-const FDCAN_RXF1C_OFFSET: usize = 0x0B0; // RX FIFO 1 config
-const FDCAN_TXEFC_OFFSET: usize = 0x0F0; // TX event FIFO config
+// NOTE: SIDFC (0x084), XIDFC (0x088), RXF0C (0x0A0), RXF1C (0x0B0), and
+// TXEFC (0x0F0) do NOT exist on STM32G4.  Those addresses are XIDAM, HPMS,
+// reserved, reserved, and TXEFA respectively.  MRAM layout on STM32G4 is
+// hardware-fixed and configured only via TXBC and RXGFC.
 
 // ---------------------------------------------------------------------------
 // Message RAM offsets (byte offsets from SRAMCAN_BASE for FDCAN1)
 // ---------------------------------------------------------------------------
 
-const MRAM_STDFILTER_OFFSET: usize = 0x000; // 28 × 1 word std filters
-const MRAM_EXTFILTER_OFFSET: usize = 0x070; // 8 × 2 word ext filters
-const MRAM_RXF0_OFFSET: usize = 0x0B0;     // 3 × 4 word RX FIFO 0 elements
-const MRAM_RXF1_OFFSET: usize = 0x0E0;     // 3 × 4 word RX FIFO 1 elements
-const MRAM_TXEVT_OFFSET: usize = 0x110;    // 3 × 2 word TX event elements
-const MRAM_TXBUF_OFFSET: usize = 0x128;    // 3 × 4 word TX buffer elements
+const MRAM_STDFILTER_OFFSET: usize = 0x000; // 28 × 1 word  std filters
+const MRAM_EXTFILTER_OFFSET: usize = 0x070; // 8  × 2 words ext filters
+const MRAM_RXF0_OFFSET:      usize = 0x0B0; // 3  × 18 words RX FIFO 0 elements  (3 × 72 B = 216 B)
+const MRAM_RXF1_OFFSET:      usize = 0x188; // 3  × 18 words RX FIFO 1 elements  (STM32G4: was 0x0E0)
+const MRAM_TXEVT_OFFSET:     usize = 0x260; // 3  × 2  words TX event FIFO        (STM32G4: was 0x110)
+const MRAM_TXBUF_OFFSET:     usize = 0x278; // 3  × 18 words TX buffer elements   (STM32G4: was 0x128)
+
+/// Byte stride between consecutive RX/TX MRAM elements on STM32G4.
+///
+/// STM32G4 FDCAN uses 18-word (72-byte) elements for both RX FIFOs and TX
+/// buffers, regardless of DLC.  Generic Bosch M_CAN uses 4-word (16-byte)
+/// elements for classic CAN; that value is WRONG on STM32G4.
+const MRAM_ELEMENT_STRIDE: usize = 18 * 4; // 72 bytes
 
 // ---------------------------------------------------------------------------
 // FDCAN_CCCR bit masks
@@ -188,8 +210,8 @@ const PSR_EP: u32 = 1 << 5;
 /// TFFL[5:0] — TX FIFO free level.
 #[allow(dead_code)]
 const TXFQS_TFFL_MASK: u32 = 0x3F;
-/// TFQPI[12:8] — TX FIFO/queue put index.
-const TXFQS_TFQPI_MASK: u32 = 0x1F << 8;
+/// TFQPI[9:8] — TX FIFO/queue put index (STM32G4: 2-bit field, max 3 entries).
+const TXFQS_TFQPI_MASK: u32 = 0x3 << 8;
 const TXFQS_TFQPI_SHIFT: u32 = 8;
 /// TFQF — TX FIFO/queue full.
 const TXFQS_TFQF: u32 = 1 << 21;
@@ -198,10 +220,10 @@ const TXFQS_TFQF: u32 = 1 << 21;
 // FDCAN_RXF0S bit masks
 // ---------------------------------------------------------------------------
 
-/// F0FL[6:0] — RX FIFO 0 fill level.
-const RXF0S_F0FL_MASK: u32 = 0x7F;
-/// F0GI[13:8] — RX FIFO 0 get index.
-const RXF0S_F0GI_MASK: u32 = 0x3F << 8;
+/// F0FL[3:0] — RX FIFO 0 fill level (STM32G4: 4-bit field [3:0], not 7-bit).
+const RXF0S_F0FL_MASK: u32 = 0xF;
+/// F0GI[9:8] — RX FIFO 0 get index (STM32G4: 2-bit field [9:8], not 6-bit [13:8]).
+const RXF0S_F0GI_MASK: u32 = 0x3 << 8;
 const RXF0S_F0GI_SHIFT: u32 = 8;
 
 // ---------------------------------------------------------------------------
@@ -211,18 +233,21 @@ const RXF0S_F0GI_SHIFT: u32 = 8;
 /// Word size in bytes.
 const WORD: usize = 4;
 
-/// Byte offset of TX buffer element `i` from SRAMCAN_BASE.
+/// Absolute address of TX buffer element `i` in message RAM.
 ///
-/// Each TX element = 4 words (T0, T1, DB0, DB1).
+/// STM32G4 FDCAN TX buffer elements are 18 words (72 bytes) each.
+/// Stride = `MRAM_ELEMENT_STRIDE` (not 4 × WORD as in generic M_CAN).
 #[inline(always)]
 const fn txbuf_elem_addr(i: usize) -> usize {
-    SRAMCAN_BASE + MRAM_TXBUF_OFFSET + i * 4 * WORD
+    SRAMCAN_BASE + MRAM_TXBUF_OFFSET + i * MRAM_ELEMENT_STRIDE
 }
 
-/// Byte offset of RX FIFO 0 element `i` from SRAMCAN_BASE.
+/// Absolute address of RX FIFO 0 element `i` in message RAM.
+///
+/// STM32G4 FDCAN RX FIFO elements are 18 words (72 bytes) each.
 #[inline(always)]
 const fn rxf0_elem_addr(i: usize) -> usize {
-    SRAMCAN_BASE + MRAM_RXF0_OFFSET + i * 4 * WORD
+    SRAMCAN_BASE + MRAM_RXF0_OFFSET + i * MRAM_ELEMENT_STRIDE
 }
 
 // ---------------------------------------------------------------------------
@@ -449,59 +474,34 @@ impl FdCanTransceiver {
         }
     }
 
-    /// Programme the message RAM pointers and sizes into FDCAN1 filter/FIFO
-    /// config registers, then set the accept-all filter policy via RXGFC.
+    /// Configure the message RAM and accept-all filter policy via RXGFC.
     ///
     /// Must be called while CCCR.INIT=1 and CCCR.CCE=1.
+    ///
+    /// # STM32G4 note
+    ///
+    /// On STM32G4 the MRAM layout is **hardware-fixed**.  The registers
+    /// SIDFC, XIDFC, RXF0C, RXF1C, and TXEFC present in generic Bosch M_CAN
+    /// do not exist here — writing to those addresses would corrupt XIDAM,
+    /// HPMS, or reserved locations.  Only two registers need to be written:
+    ///
+    /// - **TXBC** (0x0C0): TX buffer start address (word offset) and count.
+    ///   Bits [31:24] = NDT (number of dedicated TX buffers).
+    ///   Bits [15:2]  = TBSA (TX buffer start address, word offset from SRAMCAN_BASE).
+    ///   We write `MRAM_TXBUF_OFFSET / 4` as the word offset and 3 dedicated buffers.
+    ///
+    /// - **RXGFC** (0x080): global filter config.
+    ///   ANFS[5:4] = 00 → accept all non-matching std-ID frames to FIFO 0.
+    ///   ANFE[1:0] = 00 → accept all non-matching ext-ID frames to FIFO 0.
     unsafe fn configure_message_ram(&self) {
         // SAFETY: all base addresses and offsets are valid for STM32G474.
         unsafe {
-            // Standard ID filter section: 28 elements, offset in MRAM words.
-            let stdfilter_word_offset = (MRAM_STDFILTER_OFFSET / WORD) as u32;
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_SIDFC_OFFSET,
-                (28 << 16) | stdfilter_word_offset,
-            );
-
-            // Extended ID filter section: 8 elements.
-            let extfilter_word_offset = (MRAM_EXTFILTER_OFFSET / WORD) as u32;
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_XIDFC_OFFSET,
-                (8 << 16) | extfilter_word_offset,
-            );
-
-            // RX FIFO 0: 3 elements.
-            let rxf0_word_offset = (MRAM_RXF0_OFFSET / WORD) as u32;
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_RXF0C_OFFSET,
-                (3 << 16) | rxf0_word_offset,
-            );
-
-            // RX FIFO 1: 3 elements.
-            let rxf1_word_offset = (MRAM_RXF1_OFFSET / WORD) as u32;
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_RXF1C_OFFSET,
-                (3 << 16) | rxf1_word_offset,
-            );
-
-            // TX event FIFO: 3 elements.
-            let txevt_word_offset = (MRAM_TXEVT_OFFSET / WORD) as u32;
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_TXEFC_OFFSET,
-                (3 << 16) | txevt_word_offset,
-            );
-
-            // TX dedicated buffers: 3 elements (TFQM=0 → FIFO mode).
-            let txbuf_word_offset = (MRAM_TXBUF_OFFSET / WORD) as u32;
+            // TX dedicated buffers: 3 elements, FIFO mode (TFQM=0).
+            // TBSA is the word offset of MRAM_TXBUF_OFFSET from SRAMCAN_BASE.
             reg_write(
                 FDCAN1_BASE,
                 FDCAN_TXBC_OFFSET,
-                (3 << 16) | txbuf_word_offset,
+                (3 << 24) | (MRAM_TXBUF_OFFSET as u32 / 4),
             );
 
             // Global filter: accept all non-matching std/ext IDs to FIFO 0.

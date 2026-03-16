@@ -1,0 +1,5 @@
+# Linker script for cortex-m-rt on ARM targets.
+# Only applies when building with --target thumbv7em-none-eabihf;
+# host builds (tests, clippy) are unaffected.
+[target.thumbv7em-none-eabihf]
+rustflags = ["-C", "link-arg=-Tlink.x"]
