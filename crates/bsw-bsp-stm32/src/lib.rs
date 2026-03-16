@@ -10,11 +10,17 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 // Shared Cortex-M modules (no chip dependency)
+pub mod diag_can;
+#[cfg(target_arch = "arm")]
 pub mod fault;
 pub mod gpio;
+#[cfg(target_arch = "arm")]
 pub mod interrupt;
+#[cfg(target_arch = "arm")]
 pub mod scheduler;
+#[cfg(target_arch = "arm")]
 pub mod timer;
+#[cfg(target_arch = "arm")]
 pub mod watchdog;
 
 // F4-specific modules
@@ -35,9 +41,13 @@ pub mod uart_g4;
 
 // Re-exports for convenience
 pub use gpio::{InputPin, OutputPin, Port, Pull};
+#[cfg(target_arch = "arm")]
 pub use interrupt::PrimaskLock;
+#[cfg(target_arch = "arm")]
 pub use scheduler::Scheduler;
+#[cfg(target_arch = "arm")]
 pub use timer::DwtTimer;
+#[cfg(target_arch = "arm")]
 pub use watchdog::Iwdg;
 
 #[cfg(feature = "stm32f413")]

@@ -585,3 +585,10 @@ impl CanTransceiver for BxCanTransceiver {
         }
     }
 }
+
+// Implement CanReceiver for DiagCanTransport integration.
+impl crate::diag_can::CanReceiver for BxCanTransceiver {
+    fn receive(&mut self) -> Option<bsw_can::frame::CanFrame> {
+        self.dequeue_frame()
+    }
+}

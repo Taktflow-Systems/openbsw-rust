@@ -13,6 +13,11 @@ stm32g474 = []
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 bsw-can = { path = "../bsw-can", default-features = false }
+bsw-docan = { path = "../bsw-docan", default-features = false }
+bsw-uds = { path = "../bsw-uds", default-features = false }
+bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
+bsw-transport = { path = "../bsw-transport", default-features = false }
+bsw-util = { path = "../bsw-util", default-features = false }
 
 # F4-specific
 stm32f4xx-hal = { version = "0.23", features = ["stm32f413", "can"], optional = true }
