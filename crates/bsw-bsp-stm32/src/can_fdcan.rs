@@ -178,7 +178,7 @@ const NBTP_500KBPS: u32 = {
     let ntseg1: u32 = 13;   // Tseg1 − 1 = 14 − 1
     let ntseg2: u32 = 3;    // Tseg2 − 1 = 4 − 1  (bits [14:8])
     let nsjw: u32 = 3;      // SJW − 1 = 4 − 1  (bits [31:25])
-    (nsjw << 25) | (ntseg1 << 16) | (ntseg2 << 8) | nbrp
+    (nsjw << 25) | (nbrp << 16) | (ntseg1 << 8) | ntseg2
 };
 
 // ---------------------------------------------------------------------------

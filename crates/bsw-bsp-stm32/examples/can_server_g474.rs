@@ -1,7 +1,18 @@
-//! UDS diagnostic server on NUCLEO-G474RE via FDCAN1 internal loopback.
+//! UDS diagnostic server on NUCLEO-G474RE — real CAN bus via TJA transceiver.
 //!
-//! Implements a minimal ISO-TP (ISO 15765-2) Single Frame bridge and a UDS
-//! (ISO 14229-1) server that handles three diagnostic services:
+//! This is a real-bus variant of `uds_server_g474.rs`.  All ISO-TP and UDS
+//! logic is identical; the differences are:
+//!
+//! * **GPIO**: PA11 (FDCAN1_RX) / PA12 (FDCAN1_TX), AF9 — matches the
+//!   production wiring through a TJA1050/TJA1051 transceiver on the NUCLEO
+//!   morpho connector.  The loopback variant used PB8/PB9 (Arduino header).
+//! * **No loopback mode**: CCCR.TEST and TEST.LBCK are never set.  The
+//!   peripheral drives the physical CAN bus.
+//! * **No startup self-test**: there is no loopback path to echo our own
+//!   transmissions, so the self-test is removed.  The server simply prints
+//!   "ready" and enters the diagnostic loop immediately.
+//!
+//! # Services
 //!
 //! | SID  | Service                  | Positive response |
 //! |------|--------------------------|-------------------|
@@ -9,57 +20,47 @@
 //! | 0x10 | DiagnosticSessionControl | 0x50              |
 //! | 0x22 | ReadDataByIdentifier     | 0x62              |
 //!
-//! # What it does
-//!
-//! 1. Init clocks — 170 MHz boost mode via `clock_g4::configure_clocks_g474`.
-//! 2. Init DWT timer for microsecond timestamps.
-//! 3. Init USART2 at 115200 baud for diagnostic output.
-//! 4. Configure PA5 (LD2) as LED.
-//! 5. Configure FDCAN1 in internal-loopback mode (RM0440 §44.3.3).
-//! 6. Run startup self-test — send 3 UDS requests, verify responses:
-//!    - TesterPresent (0x3E 0x00)       → expect 0x7E 0x00
-//!    - DiagSessionCtrl extended (0x10 0x03) → expect 0x50 0x03 …
-//!    - ReadDID VIN (0x22 0xF1 0x90)    → expect 0x62 0xF1 0x90 + VIN
-//! 7. Enter continuous main loop — echo every request with a UDS response,
-//!    print SID and response length over UART, blink LED on each exchange.
-//!
-//! # ISO-TP support (ISO 15765-2)
+//! # ISO-TP
 //!
 //! Full Single Frame + Multi-frame (First Frame / Consecutive Frame / Flow
 //! Control) ISO-TP is implemented.  Responses >7 bytes (e.g., ReadDID VIN =
-//! 19 bytes) are automatically segmented into FF + CF sequence.
-//!
-//! ```text
-//! Byte 0   = PCI: (0x0 << 4) | payload_len   (SF_PCI)
-//! Bytes 1… = UDS payload (SID + parameters)
-//! ```
+//! 19 bytes) are automatically segmented into FF + CF sequence after receiving
+//! a Flow Control frame from the tester.
 //!
 //! # CAN IDs
 //!
 //! | Direction        | CAN ID |
 //! |------------------|--------|
-//! | Tester → ECU     | 0x600  |
-//! | ECU → Tester     | 0x601  |
+//! | Tester → Server  | 0x600  |
+//! | Server → Tester  | 0x601  |
 //!
-//! # Loopback flow
+//! # Hardware connections (NUCLEO-G474RE)
 //!
+//! ```text
+//! PA11  →  TJA RXD   (FDCAN1_RX, AF9)
+//! PA12  →  TJA TXD   (FDCAN1_TX, AF9)
+//! GND   →  TJA GND
+//! 3.3 V →  TJA VCC  (check your transceiver module — some need 5 V)
+//! CAN_H / CAN_L connected between the two boards with 120 Ω termination
+//! at each end.
 //! ```
-//!  TX (0x600)  →  FDCAN1 loopback  →  RX FIFO 0
-//!     │                                    │
-//!  Tester req                        decode ISO-TP SF
-//!                                          │
-//!                                    handle_uds_request()
-//!                                          │
-//!                                    encode ISO-TP SF (0x601)
-//!                                          │
-//!                                     TX (ignored on re-receive)
+//!
+//! # Bit timing: 500 kbit/s @ 170 MHz PCLK1
+//!
+//! ```text
+//! Prescaler = 17  (NBRP field = 16)
+//! Tseg1     = 15  (NTSEG1 field = 14)   — 15 TQ
+//! Tseg2     =  4  (NTSEG2 field =  3)   —  4 TQ
+//! SJW       =  4  (NSJW  field =  3)
+//! Bit time  = 1 + 15 + 4 = 20 TQ
+//! Baud      = 170 MHz / (17 × 20) = 500 000 bit/s ✓
 //! ```
 //!
 //! # Build
 //!
 //! ```sh
 //! cargo build --features stm32g474 --target thumbv7em-none-eabihf \
-//!             --example uds_server_g474
+//!             --example can_server_g474
 //! ```
 //!
 //! # Reference
@@ -78,7 +79,7 @@ use bsw_bsp_stm32::timer::DwtTimer;
 use bsw_bsp_stm32::uart_g4::PolledUart;
 
 // ---------------------------------------------------------------------------
-// Register-map constants (identical to can_loopback_g474.rs)
+// Register-map constants
 // ---------------------------------------------------------------------------
 
 /// RCC base address (RM0440 §6.4).
@@ -93,20 +94,16 @@ const RCC_CCIPR_OFFSET: usize = 0x88;
 const FDCAN1EN: u32 = 1 << 25;
 /// GPIOA clock enable (AHB2ENR bit 0).
 const GPIOAEN: u32 = 1 << 0;
-/// GPIOB clock enable (AHB2ENR bit 1).
-const GPIOBEN: u32 = 1 << 1;
 
 /// GPIOA base address.
 const GPIOA_BASE: usize = 0x4800_0000;
-/// GPIOB base address.
-const GPIOB_BASE: usize = 0x4800_0400;
 
 /// GPIO register offsets.
-const GPIO_MODER_OFFSET:  usize = 0x00;
+const GPIO_MODER_OFFSET:   usize = 0x00;
 const GPIO_OSPEEDR_OFFSET: usize = 0x08;
-const GPIO_AFRL_OFFSET:   usize = 0x20;
-const GPIO_AFRH_OFFSET:   usize = 0x24;
-const GPIO_BSRR_OFFSET:   usize = 0x18;
+const GPIO_AFRL_OFFSET:    usize = 0x20;
+const GPIO_AFRH_OFFSET:    usize = 0x24;
+const GPIO_BSRR_OFFSET:    usize = 0x18;
 
 /// FDCAN1 register-block base address (RM0440 §44.4).
 const FDCAN1_BASE: usize = 0x4000_6400;
@@ -118,19 +115,17 @@ const FDCAN1_BASE: usize = 0x4000_6400;
 const SRAMCAN_BASE: usize = 0x4000_A400;
 
 // ---------------------------------------------------------------------------
-// FDCAN1 register offsets (STM32G4-specific — see can_loopback_g474.rs for
-// the full table of offsets that differ from generic Bosch M_CAN IP).
+// FDCAN1 register offsets (STM32G4-specific)
 // ---------------------------------------------------------------------------
 
-const FDCAN_TEST_OFFSET:  usize = 0x010; // Test register
 const FDCAN_CCCR_OFFSET:  usize = 0x018; // CC control register
 const FDCAN_NBTP_OFFSET:  usize = 0x01C; // Nominal bit timing
 const FDCAN_RXGFC_OFFSET: usize = 0x080; // RX global filter config
-const FDCAN_RXF0S_OFFSET: usize = 0x090; // RX FIFO 0 status   (G4: 0x090)
-const FDCAN_RXF0A_OFFSET: usize = 0x094; // RX FIFO 0 ack      (G4: 0x094)
-const FDCAN_TXBC_OFFSET:  usize = 0x0C0; // TX buffer config   (G4: 0x0C0)
-const FDCAN_TXFQS_OFFSET: usize = 0x0C4; // TX FIFO/queue status (G4: 0x0C4)
-const FDCAN_TXBAR_OFFSET: usize = 0x0CC; // TX buffer add req  (G4: 0x0CC)
+const FDCAN_RXF0S_OFFSET: usize = 0x090; // RX FIFO 0 status
+const FDCAN_RXF0A_OFFSET: usize = 0x094; // RX FIFO 0 ack
+const FDCAN_TXBC_OFFSET:  usize = 0x0C0; // TX buffer config
+const FDCAN_TXFQS_OFFSET: usize = 0x0C4; // TX FIFO/queue status
+const FDCAN_TXBAR_OFFSET: usize = 0x0CC; // TX buffer add request
 
 // ---------------------------------------------------------------------------
 // FDCAN_CCCR bit masks
@@ -140,35 +135,13 @@ const FDCAN_TXBAR_OFFSET: usize = 0x0CC; // TX buffer add req  (G4: 0x0CC)
 const CCCR_INIT: u32 = 1 << 0;
 /// CCE — configuration change enable (requires INIT=1).
 const CCCR_CCE:  u32 = 1 << 1;
-/// TEST — gates write access to the TEST register.
-const CCCR_TEST: u32 = 1 << 7;
 /// FDOE — FD operation; 0 = classic CAN only.
 const CCCR_FDOE: u32 = 1 << 8;
 /// BRSE — bit-rate switching; 0 = disabled.
 const CCCR_BRSE: u32 = 1 << 9;
 
 // ---------------------------------------------------------------------------
-// FDCAN_TEST bit masks
-// ---------------------------------------------------------------------------
-
-/// LBCK (bit 4) — internal loopback mode.
-const TEST_LBCK: u32 = 1 << 4;
-
-// ---------------------------------------------------------------------------
 // STM32G4 Message RAM layout (hardware-fixed, RM0440 §44.3.3)
-//
-//   0x000–0x06F  Standard ID filters  28 × 1W  = 112 bytes
-//   0x070–0x0AF  Extended ID filters   8 × 2W  =  64 bytes
-//   0x0B0–0x187  RX FIFO 0             3 × 18W = 216 bytes
-//   0x188–0x25F  RX FIFO 1             3 × 18W = 216 bytes
-//   0x260–0x277  TX event FIFO         3 × 2W  =  24 bytes
-//   0x278–0x34F  TX buffers            3 × 18W = 216 bytes
-//
-// Classic CAN element (18 words, 72 bytes) — only first 4 words carry data:
-//   Word 0 = T0/R0: ID, XTD, RTR, ESI
-//   Word 1 = T1/R1: DLC, BRS, FDF, timestamp
-//   Word 2 = DB0:   payload bytes [3:0] little-endian
-//   Word 3 = DB1:   payload bytes [7:4] little-endian
 // ---------------------------------------------------------------------------
 
 const MRAM_RXF0_OFFSET:  usize = 0x0B0;
@@ -191,15 +164,20 @@ const TXBC_VAL: u32 = (3 << 24) | (MRAM_TXBUF_OFFSET as u32 / 4);
 // ---------------------------------------------------------------------------
 // Bit timing: 500 kbit/s @ 170 MHz PCLK1
 //
-// NBRP=16 (prescaler=17), NTSEG1=13 (Tseg1=14 TQ), NTSEG2=3 (Tseg2=4 TQ),
-// NSJW=3 (SJW=4 TQ).  Tq = 17/170 MHz = 100 ns; Fbit = 1/(19 × 100 ns).
+// NBRP=16 (prescaler=17), NTSEG1=14 (Tseg1=15 TQ), NTSEG2=3 (Tseg2=4 TQ),
+// NSJW=3 (SJW=4 TQ).  Tq = 17/170 MHz = 100 ns; bit = 20 × 100 ns = 500 kbps.
 // ---------------------------------------------------------------------------
 
+// STM32G4 FDCAN NBTP layout (DIFFERENT from standard M_CAN!):
+//   [31:25] NSJW   = SJW − 1
+//   [24:16] NBRP   = prescaler − 1    ← M_CAN has NTSEG1 here!
+//   [15: 8] NTSEG1 = Tseg1 − 1        ← M_CAN has NTSEG2 here!
+//   [ 6: 0] NTSEG2 = Tseg2 − 1        ← M_CAN has NBRP here!
 const NBTP_500KBPS: u32 = {
-    let nbrp: u32   = 16;
-    let ntseg1: u32 = 13;
-    let ntseg2: u32 = 3;
-    let nsjw: u32   = 3;
+    let nbrp:   u32 = 16;  // prescaler = 17
+    let ntseg1: u32 = 14;  // Tseg1 = 15 TQ
+    let ntseg2: u32 =  3;  // Tseg2 = 4 TQ
+    let nsjw:   u32 =  3;  // SJW = 4 TQ
     (nsjw << 25) | (nbrp << 16) | (ntseg1 << 8) | ntseg2
 };
 
@@ -210,16 +188,16 @@ const NBTP_500KBPS: u32 = {
 const LED_PIN: u32 = 5;
 
 // ---------------------------------------------------------------------------
-// CAN IDs for ISO-TP (functional addressing, classic CAN 11-bit)
+// CAN IDs for ISO-TP (physical addressing, classic CAN 11-bit)
 // ---------------------------------------------------------------------------
 
-/// Physical request CAN ID: tester → ECU.
+/// Physical request CAN ID: tester → server.
 const REQUEST_ID: u32 = 0x600;
-/// Physical response CAN ID: ECU → tester.
+/// Physical response CAN ID: server → tester.
 const RESPONSE_ID: u32 = 0x601;
 
 // ---------------------------------------------------------------------------
-// Raw MMIO helpers (file-local; same pattern as can_loopback_g474.rs)
+// Raw MMIO helpers
 // ---------------------------------------------------------------------------
 
 #[inline(always)]
@@ -253,14 +231,14 @@ unsafe fn mram_write(addr: usize, val: u32) {
 }
 
 // ---------------------------------------------------------------------------
-// GPIO helpers (identical to can_loopback_g474.rs)
+// GPIO helpers
 // ---------------------------------------------------------------------------
 
 /// Configure a GPIO pin as push-pull output, high-speed, no pull.
 unsafe fn gpio_output(base: usize, pin: u32) {
     // SAFETY: base + offsets are valid GPIO MMIO on STM32G4.
     unsafe {
-        reg_modify(base, GPIO_MODER_OFFSET,  0b11 << (pin * 2), 0b01 << (pin * 2));
+        reg_modify(base, GPIO_MODER_OFFSET,   0b11 << (pin * 2), 0b01 << (pin * 2));
         reg_modify(base, GPIO_OSPEEDR_OFFSET, 0b11 << (pin * 2), 0b10 << (pin * 2));
     }
 }
@@ -276,7 +254,7 @@ unsafe fn gpio_set(base: usize, pin: u32, high: bool) {
 unsafe fn gpio_af(base: usize, pin: u32, af: u32) {
     // SAFETY: base + AF offsets are valid GPIO MMIO on STM32G4.
     unsafe {
-        reg_modify(base, GPIO_MODER_OFFSET,  0b11 << (pin * 2), 0b10 << (pin * 2));
+        reg_modify(base, GPIO_MODER_OFFSET,   0b11 << (pin * 2), 0b10 << (pin * 2));
         reg_modify(base, GPIO_OSPEEDR_OFFSET, 0b11 << (pin * 2), 0b10 << (pin * 2));
         if pin < 8 {
             let shift = pin * 4;
@@ -289,19 +267,24 @@ unsafe fn gpio_af(base: usize, pin: u32, af: u32) {
 }
 
 // ---------------------------------------------------------------------------
-// FDCAN1 initialisation (internal loopback)
+// FDCAN1 initialisation (real bus — no loopback)
 // ---------------------------------------------------------------------------
 
-/// Enable FDCAN1 clock, configure PB8 (TX) / PB9 (RX) as AF9, select PCLK1.
+/// Enable FDCAN1 clock, configure PA11 (RX) / PA12 (TX) as AF9, select PCLK1.
+///
+/// PA11 and PA12 connect to a TJA105x transceiver on the morpho header.
+/// AF9 = FDCAN1_RX / FDCAN1_TX on these pins (RM0440 §4, AF table).
 unsafe fn fdcan1_gpio_clock_init() {
-    // SAFETY: RCC, GPIOB addresses are valid on STM32G474RE.
+    // SAFETY: RCC, GPIOA addresses are valid on STM32G474RE.
     unsafe {
-        reg_modify(RCC_BASE, RCC_AHB2ENR_OFFSET, 0, GPIOAEN | GPIOBEN);
+        // Enable GPIOA clock (USART2 init may have done this already; safe to
+        // set again — it is write-only-set in the enable register).
+        reg_modify(RCC_BASE, RCC_AHB2ENR_OFFSET, 0, GPIOAEN);
         let _ = reg_read(RCC_BASE, RCC_AHB2ENR_OFFSET); // read-back delay
 
-        // PB8 = FDCAN1_TX (AF9), PB9 = FDCAN1_RX (AF9).
-        gpio_af(GPIOB_BASE, 8, 9);
-        gpio_af(GPIOB_BASE, 9, 9);
+        // PA11 = FDCAN1_RX (AF9), PA12 = FDCAN1_TX (AF9).
+        gpio_af(GPIOA_BASE, 11, 9);
+        gpio_af(GPIOA_BASE, 12, 9);
 
         // Select PCLK1 as FDCAN kernel clock (CCIPR bits [25:24] = 0b10).
         reg_modify(RCC_BASE, RCC_CCIPR_OFFSET, 0b11 << 24, 0b10 << 24);
@@ -341,29 +324,16 @@ unsafe fn fdcan1_configure_mram() {
     }
 }
 
-/// Enable FDCAN1 internal loopback (CCCR.TEST=1, TEST.LBCK=1).
-///
-/// Must be called while FDCAN1 is in INIT + CCE mode.
-unsafe fn fdcan1_enable_loopback() {
-    unsafe {
-        reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_TEST);
-        reg_modify(FDCAN1_BASE, FDCAN_TEST_OFFSET, 0, TEST_LBCK);
-    }
-}
-
-/// Full FDCAN1 init in internal-loopback mode.
+/// Full FDCAN1 init for real CAN bus operation (no loopback).
 ///
 /// Returns `true` if the peripheral left init mode successfully.
-///
-/// To switch to normal (external bus) mode, remove the call to
-/// `fdcan1_enable_loopback()` below.
-unsafe fn fdcan1_init_loopback() -> bool {
+unsafe fn fdcan1_init() -> bool {
     unsafe {
         fdcan1_gpio_clock_init();
         fdcan1_enter_init();
         reg_write(FDCAN1_BASE, FDCAN_NBTP_OFFSET, NBTP_500KBPS);
         fdcan1_configure_mram();
-        fdcan1_enable_loopback(); // remove this line for normal (external bus) mode
+        // NOTE: no fdcan1_enable_loopback() call — real bus mode.
         fdcan1_leave_init();
         (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) == 0
     }
@@ -482,10 +452,6 @@ unsafe fn fdcan1_rx_fifo0_read() -> Option<RxFrame> {
 }
 
 // ---------------------------------------------------------------------------
-// ISO-TP Single Frame helpers
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // ISO-TP frame types (ISO 15765-2)
 //
 //   0x0N = Single Frame      (N = payload length, 1-7)
@@ -516,7 +482,7 @@ fn isotp_frame_type(pci: u8) -> Option<IsoTpFrameType> {
 /// Encode a UDS response as an ISO-TP Single Frame CAN payload.
 ///
 /// SF PCI: `byte[0] = (0x0 << 4) | payload_len`, then payload bytes.
-/// Returns number of bytes written to `out`. Caller must ensure `resp_len ≤ 7`.
+/// Returns number of bytes written to `out`. Caller must ensure `resp_len <= 7`.
 fn isotp_encode_sf(uds_data: &[u8], out: &mut [u8; 8]) -> usize {
     let payload_len = uds_data.len().min(7);
     out[0] = payload_len as u8; // PCI: type=0 (SF), length
@@ -528,13 +494,11 @@ fn isotp_encode_sf(uds_data: &[u8], out: &mut [u8; 8]) -> usize {
 ///
 /// FF PCI: `byte[0] = 0x10 | (msg_len >> 8)`, `byte[1] = msg_len & 0xFF`,
 /// then up to 6 payload bytes.
-/// Returns number of bytes written to `out` (always 8 for classic CAN).
 fn isotp_encode_ff(msg_len: u16, uds_data: &[u8], out: &mut [u8; 8]) -> usize {
     out[0] = 0x10 | ((msg_len >> 8) as u8 & 0x0F);
     out[1] = (msg_len & 0xFF) as u8;
     let first_chunk = uds_data.len().min(6);
     out[2..2 + first_chunk].copy_from_slice(&uds_data[..first_chunk]);
-    // Pad remaining bytes with 0xCC (ISO-TP padding)
     for b in &mut out[2 + first_chunk..8] {
         *b = 0xCC;
     }
@@ -544,12 +508,10 @@ fn isotp_encode_ff(msg_len: u16, uds_data: &[u8], out: &mut [u8; 8]) -> usize {
 /// Encode an ISO-TP Consecutive Frame.
 ///
 /// CF PCI: `byte[0] = 0x20 | (seq_num & 0x0F)`, then up to 7 payload bytes.
-/// Returns number of bytes written to `out`.
 fn isotp_encode_cf(seq_num: u8, data: &[u8], out: &mut [u8; 8]) -> usize {
     out[0] = 0x20 | (seq_num & 0x0F);
     let chunk = data.len().min(7);
     out[1..1 + chunk].copy_from_slice(&data[..chunk]);
-    // Pad remaining
     for b in &mut out[1 + chunk..8] {
         *b = 0xCC;
     }
@@ -561,39 +523,25 @@ fn isotp_encode_fc_cts(out: &mut [u8; 8]) -> usize {
     out[0] = 0x30; // FC, ContinueToSend
     out[1] = 0x00; // Block size = 0 (no limit)
     out[2] = 0x00; // STmin = 0 ms
-    // Pad
     for b in &mut out[3..8] {
         *b = 0xCC;
     }
     8
 }
 
-/// Decode a received CAN frame as an ISO-TP Single Frame.
+/// Send a complete UDS response over ISO-TP.
 ///
-/// Returns `Some((pci, payload_len))` if valid SF, `None` otherwise.
-/// Used by the self-test to verify SF responses.
-fn isotp_decode_sf(frame_data: &[u8]) -> Option<(u8, usize)> {
-    let pci = *frame_data.first()?;
-    if (pci >> 4) != 0 {
-        return None;
-    }
-    let payload_len = (pci & 0x0F) as usize;
-    if payload_len == 0 || payload_len > 7 {
-        return None;
-    }
-    Some((pci, payload_len))
-}
-
-/// Send a complete UDS response over ISO-TP, using SF for ≤7 bytes or FF+CF
-/// for longer responses. Waits for Flow Control from receiver for multi-frame.
+/// Uses Single Frame for payloads <= 7 bytes.  For longer responses, sends
+/// FF then waits for a real Flow Control frame from the tester before
+/// sending Consecutive Frames.
 ///
 /// # Safety
 /// Calls `fdcan1_send` and `fdcan1_rx_fifo0_read` which access FDCAN1 MMIO.
 unsafe fn isotp_send_response(
     resp_data: &[u8],
-    resp_len: usize,
-    timer: &mut DwtTimer,
-    uart: &mut PolledUart,
+    resp_len:  usize,
+    timer:     &mut DwtTimer,
+    uart:      &mut PolledUart,
 ) {
     if resp_len <= 7 {
         // Single Frame — fits in one CAN frame.
@@ -617,41 +565,42 @@ unsafe fn isotp_send_response(
         let _ = writeln!(uart, "  FF: msg_len={} first_chunk={}", msg_len, ff_payload);
         unsafe { fdcan1_send(RESPONSE_ID, &tx_buf) };
 
-        // 2. Wait for Flow Control (FC) from receiver.
-        //    In loopback mode, our own FF echoes back — discard it.
-        //    The tester/receiver should send FC on REQUEST_ID or RESPONSE_ID.
-        //    For loopback self-test, we auto-proceed after a brief delay
-        //    (no real receiver to send FC).
-        let fc_deadline = timer.system_time_us_64() + 100_000; // 100ms timeout
+        // 2. Wait for real Flow Control frame from the tester.
+        //    The tester sends FC on REQUEST_ID (0x600) after receiving our FF.
+        let fc_deadline = timer.system_time_us_64() + 1_000_000; // 1 s N_Bs timeout
         let mut got_fc = false;
         loop {
             if let Some(f) = unsafe { fdcan1_rx_fifo0_read() } {
-                let pci = f.data[0];
-                if let Some(IsoTpFrameType::FlowControl) = isotp_frame_type(pci) {
-                    let fc_status = pci & 0x0F;
-                    if fc_status == 0 {
-                        // CTS (Continue To Send)
-                        got_fc = true;
-                        let _ = writeln!(uart, "  FC: CTS received");
-                        break;
-                    } else if fc_status == 1 {
-                        // WAIT — keep polling
-                        let _ = writeln!(uart, "  FC: WAIT");
-                        continue;
-                    } else {
-                        // Overflow — abort
-                        let _ = writeln!(uart, "  FC: OVERFLOW, aborting");
-                        return;
+                // FC arrives on the request channel (0x600).
+                if f.id == REQUEST_ID {
+                    let pci = f.data[0];
+                    if let Some(IsoTpFrameType::FlowControl) = isotp_frame_type(pci) {
+                        let fc_status = pci & 0x0F;
+                        if fc_status == 0 {
+                            // CTS (Continue To Send)
+                            got_fc = true;
+                            let _ = writeln!(uart, "  FC: CTS received");
+                            break;
+                        } else if fc_status == 1 {
+                            // WAIT — reset deadline and keep polling
+                            let _ = writeln!(uart, "  FC: WAIT");
+                            continue;
+                        } else {
+                            // Overflow — abort
+                            let _ = writeln!(uart, "  FC: OVERFLOW, aborting");
+                            return;
+                        }
                     }
                 }
-                // Discard non-FC frames (echo of our FF, etc.)
             }
             if timer.system_time_us_64() >= fc_deadline {
-                // In loopback mode there's no real receiver to send FC.
-                // Auto-proceed after timeout.
-                let _ = writeln!(uart, "  FC: timeout (loopback mode), auto-proceeding");
-                break;
+                let _ = writeln!(uart, "  FC: timeout, aborting multi-frame TX");
+                return;
             }
+        }
+
+        if !got_fc {
+            return;
         }
 
         // 3. Send Consecutive Frames.
@@ -675,20 +624,20 @@ unsafe fn isotp_send_response(
     }
 }
 
-/// Decode an incoming ISO-TP frame. Returns the UDS payload for Single Frames
-/// and First Frames (starts multi-frame RX for FF).
+/// Decode an incoming ISO-TP frame (SF or FF+CF multi-frame).
 ///
-/// For multi-frame RX: sends FC(CTS), collects CFs, reassembles into `rx_buf`.
-/// Returns the total reassembled payload length, or 0 on failure.
+/// For multi-frame RX: sends FC(CTS) on RESPONSE_ID, collects CFs,
+/// reassembles into `rx_buf`.  Returns the total payload length, or 0 on
+/// failure.
 ///
 /// # Safety
 /// Calls `fdcan1_send` and `fdcan1_rx_fifo0_read` for FC/CF exchange.
 unsafe fn isotp_receive_request(
     frame_data: &[u8],
-    dlc: usize,
-    rx_buf: &mut [u8; 256],
-    timer: &mut DwtTimer,
-    uart: &mut PolledUart,
+    dlc:        usize,
+    rx_buf:     &mut [u8; 256],
+    timer:      &mut DwtTimer,
+    uart:       &mut PolledUart,
 ) -> usize {
     let pci = frame_data[0];
     match isotp_frame_type(pci) {
@@ -707,25 +656,25 @@ unsafe fn isotp_receive_request(
                 let _ = writeln!(uart, "  FF: msg_len={} too large, dropping", msg_len);
                 return 0;
             }
-            // Copy first chunk (up to 6 bytes).
             let first_chunk = (dlc - 2).min(6).min(msg_len);
             rx_buf[..first_chunk].copy_from_slice(&frame_data[2..2 + first_chunk]);
             let mut received = first_chunk;
 
             let _ = writeln!(uart, "  FF: msg_len={} first_chunk={}", msg_len, first_chunk);
 
-            // Send Flow Control: CTS, BS=0, STmin=0.
+            // Send Flow Control: CTS, BS=0, STmin=0 — on the RESPONSE channel
+            // because this is the server sending FC back to the tester.
             let mut fc_buf = [0u8; 8];
             isotp_encode_fc_cts(&mut fc_buf);
             unsafe { fdcan1_send(RESPONSE_ID, &fc_buf) };
 
-            // Collect Consecutive Frames.
+            // Collect Consecutive Frames on REQUEST_ID.
             let mut expected_seq: u8 = 1;
-            let cf_deadline = timer.system_time_us_64() + 1_000_000; // 1s N_Cr timeout
+            let cf_deadline = timer.system_time_us_64() + 1_000_000; // 1 s N_Cr timeout
             while received < msg_len {
                 if let Some(f) = unsafe { fdcan1_rx_fifo0_read() } {
                     if f.id != REQUEST_ID {
-                        continue; // discard echo/other
+                        continue;
                     }
                     let cf_pci = f.data[0];
                     if let Some(IsoTpFrameType::ConsecutiveFrame) = isotp_frame_type(cf_pci) {
@@ -733,7 +682,7 @@ unsafe fn isotp_receive_request(
                         if seq != (expected_seq & 0x0F) {
                             let _ = writeln!(uart, "  CF: seq mismatch expected={} got={}",
                                              expected_seq & 0x0F, seq);
-                            return 0; // abort
+                            return 0;
                         }
                         let remaining = msg_len - received;
                         let chunk = remaining.min(7);
@@ -769,25 +718,20 @@ unsafe fn isotp_receive_request(
 ///
 /// Returns the number of bytes written to `response`.
 ///
-/// Supported services:
-///
 /// | SID  | Service                     |
 /// |------|-----------------------------|
 /// | 0x3E | TesterPresent               |
 /// | 0x10 | DiagnosticSessionControl    |
 /// | 0x22 | ReadDataByIdentifier        |
 ///
-/// DIDs supported by 0x22:
-///
-/// | DID    | Description      | Value                   |
-/// |--------|------------------|-------------------------|
-/// | 0xF190 | VIN              | `TAKTFLOW_G474_01`      |
-/// | 0xF195 | SW version       | `BSP-0.1.0`             |
+/// | DID    | Description      | Value              |
+/// |--------|------------------|--------------------|
+/// | 0xF190 | VIN              | `TAKTFLOW_G474_01` |
+/// | 0xF195 | SW version       | `BSP-0.1.0`        |
 fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
     match request.first() {
         // ------------------------------------------------------------------
         // 0x3E TesterPresent
-        // Positive response: 0x7E subFunction
         // ------------------------------------------------------------------
         Some(&0x3E) => {
             response[0] = 0x7E;
@@ -797,7 +741,6 @@ fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
 
         // ------------------------------------------------------------------
         // 0x10 DiagnosticSessionControl
-        // Positive response: 0x50 sessionType P2 P2*
         // ------------------------------------------------------------------
         Some(&0x10) => {
             let session = request.get(1).copied().unwrap_or(0x01);
@@ -812,7 +755,6 @@ fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
 
         // ------------------------------------------------------------------
         // 0x22 ReadDataByIdentifier
-        // Positive response: 0x62 DID_high DID_low data…
         // ------------------------------------------------------------------
         Some(&0x22) => {
             let did_hi = request.get(1).copied().unwrap_or(0x00);
@@ -820,7 +762,7 @@ fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
             let did = u16::from_be_bytes([did_hi, did_lo]);
             match did {
                 0xF190 => {
-                    // VIN — 17-char ASCII, padded/truncated to fit
+                    // VIN — 16-char ASCII (multi-frame response: 19 bytes total)
                     response[0] = 0x62;
                     response[1] = 0xF1;
                     response[2] = 0x90;
@@ -830,7 +772,7 @@ fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
                     3 + len
                 }
                 0xF195 => {
-                    // Software version
+                    // Software version (12 bytes total — fits in SF)
                     response[0] = 0x62;
                     response[1] = 0xF1;
                     response[2] = 0x95;
@@ -862,41 +804,6 @@ fn handle_uds_request(request: &[u8], response: &mut [u8]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// Self-test helpers
-// ---------------------------------------------------------------------------
-
-/// Send a single ISO-TP SF request and wait for the response (up to `timeout_us`).
-///
-/// Returns `Some(RxFrame)` if a frame with `RESPONSE_ID` is received in time,
-/// `None` on timeout.
-unsafe fn selftest_send_recv(
-    timer:      &mut DwtTimer,
-    req_data:   &[u8],         // raw UDS payload (not yet ISO-TP wrapped)
-    timeout_us: u64,
-) -> Option<RxFrame> {
-    // Encode request as ISO-TP SF.
-    let mut tx_buf = [0u8; 8];
-    let tx_len = isotp_encode_sf(req_data, &mut tx_buf);
-
-    unsafe { fdcan1_send(REQUEST_ID, &tx_buf[..tx_len]) };
-
-    let deadline = timer.system_time_us_64() + timeout_us;
-    loop {
-        if let Some(f) = unsafe { fdcan1_rx_fifo0_read() } {
-            // In loopback we may receive our own TX first (same CAN ID 0x600);
-            // discard it and wait for the ECU response (0x601).
-            if f.id == RESPONSE_ID {
-                return Some(f);
-            }
-            // Discard REQUEST_ID echo — keep waiting.
-        }
-        if timer.system_time_us_64() >= deadline {
-            return None;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Main loop: process one incoming request frame and emit a UDS response.
 // ---------------------------------------------------------------------------
 
@@ -910,8 +817,7 @@ unsafe fn process_one_request(uart: &mut PolledUart, timer: &mut DwtTimer) -> bo
         None    => return false,
     };
 
-    // Ignore anything that is not a tester request (e.g., our own response
-    // echo that loops back again after we send 0x601).
+    // Only process tester requests (0x600).  Discard any stray frames.
     if frame.id != REQUEST_ID {
         return false;
     }
@@ -933,11 +839,11 @@ unsafe fn process_one_request(uart: &mut PolledUart, timer: &mut DwtTimer) -> bo
     let mut resp_buf = [0u8; 256];
     let resp_len = handle_uds_request(uds_request, &mut resp_buf);
 
-    // ISO-TP encode + send response (SF or FF+CF automatically).
+    // ISO-TP encode + send response.
     unsafe { isotp_send_response(&resp_buf, resp_len, timer, uart) };
 
-    // Heartbeat blink.
-    let ts = timer.system_time_us_64();
+    // Heartbeat blink: toggle LED on every successful exchange.
+    let ts  = timer.system_time_us_64();
     let led = ((ts / 500_000) & 1) != 0;
     unsafe { gpio_set(GPIOA_BASE, LED_PIN, led) };
 
@@ -975,7 +881,7 @@ fn main() -> ! {
     let mut uart = PolledUart::new();
     uart.init();
     let _ = writeln!(uart,
-        "\r\n=== UDS server starting @ {} MHz ===",
+        "\r\n=== CAN server (real bus) starting @ {} MHz ===",
         sys_clock / 1_000_000);
 
     // ------------------------------------------------------------------
@@ -988,188 +894,95 @@ fn main() -> ! {
     }
 
     // ------------------------------------------------------------------
-    // 5. FDCAN1 in internal-loopback mode
+    // 5. FDCAN1 — PA11/PA12 AF9, 500 kbps, real bus (no loopback)
     // ------------------------------------------------------------------
-    let _ = writeln!(uart, "Initialising FDCAN1 (loopback mode)...");
-    let init_ok = unsafe { fdcan1_init_loopback() };
+    let _ = writeln!(uart, "Initialising FDCAN1 (real bus, PA11=RX PA12=TX, 500 kbps)...");
+    let init_ok = unsafe { fdcan1_init() };
     if !init_ok {
         let _ = writeln!(uart, "FAIL: FDCAN1 did not leave init mode");
-        blink_forever(&mut timer, 500_000);
+        blink_forever(&mut timer, 200_000); // fast blink = fatal error
     }
-    let _ = writeln!(uart, "FDCAN1 ready.  RX=0x{:03X}  TX=0x{:03X}", REQUEST_ID, RESPONSE_ID);
-
-    // ------------------------------------------------------------------
-    // 6. Startup self-test — send 3 UDS requests, verify responses
-    // ------------------------------------------------------------------
-    let _ = writeln!(uart, "\r\n--- Self-test sequence ---");
-
-    let mut all_passed = true;
-
-    // ---- Test 1: TesterPresent ----
-    {
-        let req = [0x3E_u8, 0x00];
-        let _ = writeln!(uart, "[1] TesterPresent  req={:02X?}", &req[..]);
-
-        // The server processes requests in the main loop; for the self-test we
-        // drive both sides inline:
-        //   a) Send the request via TX.
-        //   b) Process the received request (loopback → RX FIFO 0).
-        //   c) Receive the response (RESPONSE_ID frame).
-
-        let mut tx_buf = [0u8; 8];
-        let tx_len = isotp_encode_sf(&req, &mut tx_buf);
-        unsafe { fdcan1_send(REQUEST_ID, &tx_buf[..tx_len]) };
-
-        // Brief delay for TX to settle in loopback.
-        let t0 = timer.system_time_us_64();
-        while timer.system_time_us_64() < t0 + 1_000 {}
-
-        // Process the incoming request (sends response to 0x601).
-        let _ = unsafe { process_one_request(&mut uart, &mut timer) };
-
-        // Collect the response from RX FIFO 0 (it is the 0x601 loopback).
-        let deadline = timer.system_time_us_64() + 20_000;
-        let resp = loop {
-            if let Some(f) = unsafe { fdcan1_rx_fifo0_read() } {
-                if f.id == RESPONSE_ID { break Some(f); }
-            }
-            if timer.system_time_us_64() >= deadline { break None; }
-        };
-
-        let passed = match resp {
-            None => {
-                let _ = writeln!(uart, "  FAIL: timeout");
-                false
-            }
-            Some(f) => {
-                let dlc = f.dlc.min(8) as usize;
-                // ISO-TP SF decode
-                if let Some((_, plen)) = isotp_decode_sf(&f.data[..dlc]) {
-                    let uds = &f.data[1..1 + plen];
-                    // Expect 0x7E 0x00
-                    let ok = uds.get(0) == Some(&0x7E) && uds.get(1) == Some(&0x00);
-                    let _ = writeln!(uart, "  resp={:02X?}  {}",
-                        &f.data[..dlc],
-                        if ok { "PASS" } else { "FAIL: unexpected response" });
-                    ok
-                } else {
-                    let _ = writeln!(uart, "  FAIL: non-SF response");
-                    false
-                }
-            }
-        };
-        if !passed { all_passed = false; }
-    }
-
-    // ---- Test 2: DiagnosticSessionControl (extended, 0x03) ----
-    {
-        let req = [0x10_u8, 0x03];
-        let _ = writeln!(uart, "[2] DiagSessionCtrl extended  req={:02X?}", &req[..]);
-
-        let mut tx_buf = [0u8; 8];
-        let tx_len = isotp_encode_sf(&req, &mut tx_buf);
-        unsafe { fdcan1_send(REQUEST_ID, &tx_buf[..tx_len]) };
-
-        let t0 = timer.system_time_us_64();
-        while timer.system_time_us_64() < t0 + 1_000 {}
-
-        let _ = unsafe { process_one_request(&mut uart, &mut timer) };
-
-        let deadline = timer.system_time_us_64() + 20_000;
-        let resp = loop {
-            if let Some(f) = unsafe { fdcan1_rx_fifo0_read() } {
-                if f.id == RESPONSE_ID { break Some(f); }
-            }
-            if timer.system_time_us_64() >= deadline { break None; }
-        };
-
-        let passed = match resp {
-            None => {
-                let _ = writeln!(uart, "  FAIL: timeout");
-                false
-            }
-            Some(f) => {
-                let dlc = f.dlc.min(8) as usize;
-                if let Some((_, plen)) = isotp_decode_sf(&f.data[..dlc]) {
-                    let uds = &f.data[1..1 + plen];
-                    // Expect 0x50 0x03 …
-                    let ok = uds.get(0) == Some(&0x50) && uds.get(1) == Some(&0x03);
-                    let _ = writeln!(uart, "  resp={:02X?}  {}",
-                        &f.data[..dlc],
-                        if ok { "PASS" } else { "FAIL: unexpected response" });
-                    ok
-                } else {
-                    let _ = writeln!(uart, "  FAIL: non-SF response");
-                    false
-                }
-            }
-        };
-        if !passed { all_passed = false; }
-    }
-
-    // ---- Test 3: ReadDataByIdentifier VIN (DID 0xF190) ----
-    // VIN response is 19 bytes → multi-frame (FF + 2×CF).
-    // In loopback mode, the FF/CF loop back and get consumed by
-    // isotp_send_response internally. We verify by checking that
-    // process_one_request succeeded and the UART log shows correct
-    // multi-frame segmentation.
-    {
-        let req = [0x22_u8, 0xF1, 0x90];
-        let _ = writeln!(uart, "[3] ReadDID VIN  req={:02X?}", &req[..]);
-
-        let mut tx_buf = [0u8; 8];
-        let tx_len = isotp_encode_sf(&req, &mut tx_buf);
-        unsafe { fdcan1_send(REQUEST_ID, &tx_buf[..tx_len]) };
-
-        let t0 = timer.system_time_us_64();
-        while timer.system_time_us_64() < t0 + 1_000 {}
-
-        let processed = unsafe { process_one_request(&mut uart, &mut timer) };
-
-        // Drain any looped-back FF/CF frames from the FIFO.
-        let drain_deadline = timer.system_time_us_64() + 200_000;
-        while timer.system_time_us_64() < drain_deadline {
-            let _ = unsafe { fdcan1_rx_fifo0_read() };
-        }
-
-        if processed {
-            let _ = writeln!(uart, "  PASS (multi-frame TX verified via UART log)");
-        } else {
-            let _ = writeln!(uart, "  FAIL: process_one_request returned false");
-            all_passed = false;
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // 6b. Self-test summary
-    // ------------------------------------------------------------------
-    if all_passed {
-        let _ = writeln!(uart, "\r\n*** SELF-TEST: PASS — entering diagnostic server loop ***\r\n");
-        // Solid LED = all tests passed.
-        unsafe { gpio_set(GPIOA_BASE, LED_PIN, true) };
-    } else {
-        let _ = writeln!(uart, "\r\n*** SELF-TEST: FAIL — see above for details ***\r\n");
-    }
+    let _ = writeln!(uart,
+        "FDCAN1 ready.  Listen=0x{:03X}  Reply=0x{:03X}",
+        REQUEST_ID, RESPONSE_ID);
+    let _ = writeln!(uart, "Waiting for UDS requests from tester...\r\n");
     uart.flush();
 
+    // GPIO + Clock diagnostic — verify pin config and FDCAN clock source
+    unsafe {
+        let moder = reg_read(GPIOA_BASE, GPIO_MODER_OFFSET);
+        let afrh  = reg_read(GPIOA_BASE, GPIO_AFRH_OFFSET);
+        let ccipr = reg_read(RCC_BASE, RCC_CCIPR_OFFSET);
+        let apb1enr1 = reg_read(RCC_BASE, RCC_APB1ENR1_OFFSET);
+        // PA11 MODER bits [23:22], PA12 MODER bits [25:24] — expect 0b10 (AF)
+        let pa11_mode = (moder >> 22) & 0x3;
+        let pa12_mode = (moder >> 24) & 0x3;
+        // AFRH: PA11 AF at bits [15:12], PA12 AF at bits [19:16] — expect 9
+        let pa11_af = (afrh >> 12) & 0xF;
+        let pa12_af = (afrh >> 16) & 0xF;
+        let fdcan_clksel = (ccipr >> 24) & 0x3;
+        let fdcan1en = (apb1enr1 >> 25) & 1;
+        let _ = writeln!(uart, "GPIO: PA11=mode{}/AF{} PA12=mode{}/AF{}", pa11_mode, pa11_af, pa12_mode, pa12_af);
+        let _ = writeln!(uart, "CLK: FDCANSEL={} (0=HSE,1=PLL_Q,2=PCLK1) FDCAN1EN={}", fdcan_clksel, fdcan1en);
+    }
+
+    // Diagnostic dump — FDCAN status after init
+    unsafe {
+        let cccr = reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET);
+        let psr  = reg_read(FDCAN1_BASE, 0x044); // PSR
+        let ecr  = reg_read(FDCAN1_BASE, 0x040); // ECR
+        let rxf0s = reg_read(FDCAN1_BASE, FDCAN_RXF0S_OFFSET);
+        let txbc = reg_read(FDCAN1_BASE, FDCAN_TXBC_OFFSET);
+        let txfqs = reg_read(FDCAN1_BASE, FDCAN_TXFQS_OFFSET);
+        let nbtp = reg_read(FDCAN1_BASE, FDCAN_NBTP_OFFSET);
+        let _ = writeln!(uart, "DIAG: CCCR=0x{:08X} PSR=0x{:08X} ECR=0x{:08X}", cccr, psr, ecr);
+        let _ = writeln!(uart, "DIAG: RXF0S=0x{:08X} TXBC=0x{:08X} TXFQS=0x{:08X} NBTP=0x{:08X}", rxf0s, txbc, txfqs, nbtp);
+        let act = (psr >> 3) & 0x3;
+        let ep = (psr >> 5) & 1;
+        let bo = (psr >> 7) & 1;
+        let lec = psr & 0x7;
+        let _ = writeln!(uart, "DIAG: ACT={} EP={} BO={} LEC={}", act, ep, bo, lec);
+    }
+
+    // Solid LED = peripheral initialised successfully.
+    unsafe { gpio_set(GPIOA_BASE, LED_PIN, true) };
+
+    // Periodic diagnostic — print FDCAN status every 5 seconds
+    let mut last_diag = timer.system_time_us_64();
+
     // ------------------------------------------------------------------
-    // 7. Continuous diagnostic server loop
+    // 6. Continuous diagnostic server loop
     //
     //    - Poll RX FIFO 0 for request frames (CAN ID 0x600).
-    //    - Decode ISO-TP SF, dispatch to UDS handler, send response (0x601).
-    //    - Blink LED (0.5 Hz heartbeat via DWT timestamp).
+    //    - Decode ISO-TP SF / FF+CF, dispatch to UDS handler.
+    //    - Send response on CAN ID 0x601.
+    //    - Blink LED on each successful exchange (500 ms half-period).
+    //    - Slow heartbeat when idle (1 Hz).
     // ------------------------------------------------------------------
-    let _ = writeln!(uart, "Listening for UDS requests on CAN ID 0x{:03X}...", REQUEST_ID);
-
     loop {
-        unsafe {
-            let _ = process_one_request(&mut uart, &mut timer);
+        let processed = unsafe { process_one_request(&mut uart, &mut timer) };
+
+        // Periodic FDCAN diagnostic every 5 seconds
+        let now = timer.system_time_us_64();
+        if now - last_diag >= 5_000_000 {
+            last_diag = now;
+            unsafe {
+                let psr = reg_read(FDCAN1_BASE, 0x044);
+                let ecr = reg_read(FDCAN1_BASE, 0x040);
+                let rxf0s = reg_read(FDCAN1_BASE, FDCAN_RXF0S_OFFSET);
+                let ir = reg_read(FDCAN1_BASE, 0x050);
+                let _ = writeln!(uart, "DIAG: PSR=0x{:08X} ECR=0x{:08X} RXF0S=0x{:08X} IR=0x{:08X}",
+                    psr, ecr, rxf0s, ir);
+            }
         }
 
-        // Slow heartbeat blink (1 Hz, 500 ms half-period) when idle.
-        let ts  = timer.system_time_us_64();
-        let led = ((ts / 1_000_000) & 1) != 0;
-        unsafe { gpio_set(GPIOA_BASE, LED_PIN, led) };
+        // Slow heartbeat blink (1 Hz) when idle; suppress during exchanges
+        // (process_one_request handles blink there).
+        if !processed {
+            let ts  = timer.system_time_us_64();
+            let led = ((ts / 1_000_000) & 1) != 0;
+            unsafe { gpio_set(GPIOA_BASE, LED_PIN, led) };
+        }
     }
 }
 
@@ -1179,8 +992,6 @@ fn main() -> ! {
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    // Rapid blink on PA5 to signal a panic, then halt with a breakpoint.
-    // A real application would log the panic info over UART before halting.
     loop {
         cortex_m::asm::bkpt();
     }
