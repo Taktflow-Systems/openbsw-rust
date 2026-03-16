@@ -7,11 +7,13 @@ members = [
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-# Allow common patterns in embedded code
+# Allow common patterns in embedded/protocol code
 module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 must_use_candidate = "allow"
+cast_possible_truncation = "allow"  # UDS protocol uses fixed byte widths (u8/u16/u32)
+doc_markdown = "allow"  # Technical terms (ISO-TP, FDCAN, etc.) don't need backticks
 
 [profile.release]
 lto = true

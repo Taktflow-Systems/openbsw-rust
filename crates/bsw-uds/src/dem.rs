@@ -69,6 +69,12 @@ pub struct DemManager<const MAX_DTCS: usize> {
     dtc_setting_enabled: bool,
 }
 
+impl<const MAX_DTCS: usize> Default for DemManager<MAX_DTCS> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const MAX_DTCS: usize> DemManager<MAX_DTCS> {
     /// Create a new, empty DEM manager with DTC setting enabled.
     pub const fn new() -> Self {
