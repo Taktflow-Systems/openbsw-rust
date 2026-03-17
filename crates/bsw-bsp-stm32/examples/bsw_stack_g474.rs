@@ -449,6 +449,44 @@ fn main() -> ! {
         let _ = writeln!(uart, "FDCAN: NBTP=0x{:08X} CCCR=0x{:08X} PSR=0x{:08X}", nbtp, cccr, psr);
         let _ = writeln!(uart, "Expected NBTP=0x{:08X}", (3u32 << 25) | (16 << 16) | (13 << 8) | 3);
     }
+    // Debug: test flash erase on page 125 (NvM data page, bank 2)
+    unsafe {
+        let _ = writeln!(uart, "Flash test: unlock...");
+        let unlocked = FlashG4::unlock();
+        let cr_before = core::ptr::read_volatile(0x4002_2014 as *const u32);
+        let _ = writeln!(uart, "  unlock={} CR=0x{:08X}", unlocked, cr_before);
+
+        let _ = writeln!(uart, "Flash test: erase page 125...");
+        FlashG4::clear_errors();
+        let erased = FlashG4::erase_page(125);
+        let sr_after = core::ptr::read_volatile(0x4002_2010 as *const u32);
+        let cr_after = core::ptr::read_volatile(0x4002_2014 as *const u32);
+        let _ = writeln!(uart, "  erased={} SR=0x{:08X} CR=0x{:08X}", erased, sr_after, cr_after);
+
+        // Flush caches and read page to verify erased (all 0xFF)
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+        // Invalidate D-cache for this address range if enabled
+        let val = core::ptr::read_volatile(0x0807_D000 as *const u32);
+        let val2 = core::ptr::read_volatile(0x0807_D004 as *const u32);
+        let _ = writeln!(uart, "  page125[0..7]=0x{:08X} 0x{:08X} (expect FFFFFFFF)", val, val2);
+
+        // Also try erasing WITHOUT BKER to see if that works
+        let _ = writeln!(uart, "Flash test: erase page 125 without BKER...");
+        FlashG4::clear_errors();
+        // Direct CR write: PER=1, PNB=125, BKER=0, STRT=1
+        let cr_val = (1u32 << 1) | (125u32 << 3) | (1u32 << 16);
+        core::ptr::write_volatile(0x4002_2014 as *mut u32, cr_val);
+        while core::ptr::read_volatile(0x4002_2010 as *const u32) & (1 << 16) != 0 {}
+        let sr2 = core::ptr::read_volatile(0x4002_2010 as *const u32);
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+        let val3 = core::ptr::read_volatile(0x0807_D000 as *const u32);
+        let _ = writeln!(uart, "  no-BKER: SR=0x{:08X} page125[0]=0x{:08X}", sr2, val3);
+
+        FlashG4::lock();
+    }
+
     let _ = writeln!(uart, "BSW stack ready.  Listen=0x{:03X}  Reply=0x{:03X}", REQUEST_ID, RESPONSE_ID);
     uart.flush();
 
