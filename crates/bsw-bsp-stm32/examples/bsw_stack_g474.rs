@@ -95,7 +95,7 @@ use bsw_bsp_stm32::nvm::{NvmManager, NvmBlockId};
 use bsw_lifecycle::LifecycleComponent as _;
 use bsw_uds::diag_job::{DiagJob, DiagRouter};
 use bsw_uds::nrc::Nrc;
-use bsw_uds::services::{TesterPresent, DiagnosticSessionControl, ControlDtcSetting, SecurityAccess, RoutineControl};
+use bsw_uds::services::{TesterPresent, DiagnosticSessionControl, ControlDtcSetting, SecurityAccess, RoutineControl, ReadDtcInformation, ClearDiagnosticInformation};
 use bsw_uds::session::{DiagSession, SessionMask};
 
 // ---------------------------------------------------------------------------
@@ -413,9 +413,11 @@ fn main() -> ! {
     let control_dtc    = ControlDtcSetting { session_mask: SessionMask::ALL };
     let security       = SecurityAccess::new(SessionMask::ALL, 3);
     let routine_ctrl   = RoutineControl { session_mask: SessionMask::ALL };
+    let read_dtc       = ReadDtcInformation { session_mask: SessionMask::ALL };
+    let clear_dtc      = ClearDiagnosticInformation { session_mask: SessionMask::ALL };
 
-    // 6b. Build the jobs slice (array of trait-object references).
-    let jobs: [&dyn DiagJob; 7] = [
+    // 6b. Build the jobs slice — all 9 UDS services.
+    let jobs: [&dyn DiagJob; 9] = [
         &tester_present,
         &session_ctrl,
         &read_did,
@@ -423,6 +425,8 @@ fn main() -> ! {
         &control_dtc,
         &security,
         &routine_ctrl,
+        &read_dtc,
+        &clear_dtc,
     ];
 
     // 6c. DiagRouter borrows the jobs slice.
