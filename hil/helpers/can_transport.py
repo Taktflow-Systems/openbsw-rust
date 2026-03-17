@@ -39,7 +39,7 @@ def send_recv_raw(can_id: int, data_hex: str, resp_id: int = RESPONSE_ID,
 
 
 def send_recv_multi(can_id: int, data_hex: str, resp_id: int = RESPONSE_ID,
-                    fc_id: int = REQUEST_ID, timeout: float = 3.0,
+                    fc_id: int = REQUEST_ID, timeout: float = 1.0,
                     max_frames: int = 10) -> Optional[str]:
     """Send a CAN frame, receive multi-frame response (FF+FC+CFs).
     Returns reassembled hex data or None."""

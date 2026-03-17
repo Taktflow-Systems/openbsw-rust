@@ -32,7 +32,7 @@ NRC_GENERAL_PROGRAMMING_FAILURE = 0x72
 KNOWN_SIDS = {0x10, 0x11, 0x14, 0x19, 0x22, 0x27, 0x2E, 0x31, 0x3E, 0x85}
 
 
-def send_uds_sf(request: bytes, timeout: float = 2.0) -> Optional[bytes]:
+def send_uds_sf(request: bytes, timeout: float = 1.0) -> Optional[bytes]:
     """Send UDS request, receive response. Handles both SF and multi-frame.
     Always uses the multi-frame transport (sends FC automatically for FF responses).
     Returns the full reassembled UDS payload."""
