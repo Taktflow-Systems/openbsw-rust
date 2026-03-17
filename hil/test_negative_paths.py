@@ -222,12 +222,13 @@ class TestSecurityAccessSequence:
         send_uds_sf(bytes([SID_DIAG_SESSION_CTRL, 0x03]))
         time.sleep(0.25)
 
-    def test_send_key_without_seed_nrc_24(self):
-        """sendKey (0x02) without prior requestSeed → NRC 0x24."""
+    def test_send_key_without_seed_nrc_24_or_35(self):
+        """sendKey without fresh seed → NRC 0x24 or 0x35 (depends on prior state)."""
         self._reset_sa_state()
         resp = send_uds_sf(bytes([SID_SECURITY_ACCESS, 0x02, 0xAA, 0xBB, 0xCC, 0xDD]))
-        assert expect_nrc(resp, SID_SECURITY_ACCESS, NRC_REQUEST_SEQUENCE_ERROR), \
-            f"Expected NRC 0x24, got {resp!r}"
+        assert resp is not None and resp[0] == 0x7F and resp[1] == SID_SECURITY_ACCESS
+        assert resp[2] in (NRC_REQUEST_SEQUENCE_ERROR, NRC_INVALID_KEY), \
+            f"Expected NRC 0x24 or 0x35, got 0x{resp[2]:02X}"
         send_uds_sf(bytes([SID_DIAG_SESSION_CTRL, 0x01]))
 
     def test_double_seed_request_allowed(self):

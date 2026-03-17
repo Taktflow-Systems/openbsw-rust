@@ -270,16 +270,49 @@ impl DiagJob for ReadDidHandler {
                 }
             }
             0xF195 => {
-                // SW version — 9-char ASCII: response = [0x62, 0xF1, 0x95, <9 bytes>] = 12 bytes.
-                if response.len() < 12 {
-                    return Err(Nrc::ResponseTooLong);
-                }
+                // SW version
                 response[0] = 0x62;
                 response[1] = 0xF1;
                 response[2] = 0x95;
                 let ver = b"BSP-0.1.0";
                 response[3..3 + 9].copy_from_slice(ver);
                 Ok(12)
+            }
+            0xF18C => {
+                // ECU serial number
+                response[0] = 0x62;
+                response[1] = 0xF1;
+                response[2] = 0x8C;
+                let sn = b"SN00000001";
+                response[3..3 + 10].copy_from_slice(sn);
+                Ok(13)
+            }
+            0xF193 => {
+                // System supplier ECU HW version
+                response[0] = 0x62;
+                response[1] = 0xF1;
+                response[2] = 0x93;
+                let hw = b"HW-1.0";
+                response[3..3 + 6].copy_from_slice(hw);
+                Ok(9)
+            }
+            0xF18A => {
+                // System supplier identifier
+                response[0] = 0x62;
+                response[1] = 0xF1;
+                response[2] = 0x8A;
+                let sup = b"Taktflow";
+                response[3..3 + 8].copy_from_slice(sup);
+                Ok(11)
+            }
+            0xF180 => {
+                // Boot SW version
+                response[0] = 0x62;
+                response[1] = 0xF1;
+                response[2] = 0x80;
+                let boot = b"BOOT-0.1";
+                response[3..3 + 8].copy_from_slice(boot);
+                Ok(11)
             }
             _ => Err(Nrc::RequestOutOfRange),
         }
