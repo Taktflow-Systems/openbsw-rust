@@ -1,0 +1,17 @@
+{
+  "allowed_license_expressions": [
+    "MIT",
+    "MIT OR Apache-2.0",
+    "MIT/Apache-2.0",
+    "(MIT OR Apache-2.0) AND Unicode-3.0",
+    "(MIT OR Apache-2.0) AND NCSA",
+    "MIT OR Apache-2.0 OR LGPL-2.1-or-later"
+  ],
+  "manifests": [
+    "Cargo.toml",
+    "fuzz/Cargo.toml",
+    "tools/resource-probe/Cargo.toml"
+  ],
+  "workspace_license": "Apache-2.0",
+  "forbid_git_dependencies": true
+}

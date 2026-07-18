@@ -1,0 +1,18 @@
+[package]
+name = "bsw-storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Block storage contracts, journaled atomic storage, POSIX file backend, and blob streaming for OpenBSW Rust"
+
+[features]
+default = ["std"]
+std = ["bsw-util/std"]
+
+[dependencies]
+bsw-util = { path = "../bsw-util", default-features = false }
+
+[lints]
+workspace = true

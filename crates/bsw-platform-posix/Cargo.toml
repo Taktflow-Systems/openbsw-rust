@@ -1,0 +1,28 @@
+[package]
+name = "bsw-platform-posix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "POSIX host platform aggregation layer (platform traits, clock, executor, console, CAN, networking, storage, test controls) for OpenBSW Rust"
+
+[features]
+default = []
+# Linux-only: forwards to bsw-can's SocketCAN adapter. bsw-can gates the
+# module on `target_os = "linux"`, so enabling this feature on other hosts
+# is inert (it compiles, but no SocketCAN types exist). The feature is
+# exercised by the Linux `socketcan` CI job against a provisioned vcan0.
+socketcan = ["bsw-can/socketcan"]
+
+[dependencies]
+bsw-async = { path = "../bsw-async" }
+bsw-can = { path = "../bsw-can" }
+bsw-console = { path = "../bsw-console" }
+bsw-ethernet = { path = "../bsw-ethernet" }
+bsw-platform = { path = "../bsw-platform" }
+bsw-storage = { path = "../bsw-storage" }
+bsw-time = { path = "../bsw-time" }
+
+[lints]
+workspace = true

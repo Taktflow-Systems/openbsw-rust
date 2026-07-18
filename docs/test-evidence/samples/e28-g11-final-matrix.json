@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "evidence_id": "e28-g11-final-matrix",
+  "package_ids": [
+    "E28", "E29", "E30", "E31", "E32", "E33", "E34",
+    "F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08", "F09", "F10",
+    "G01", "G02", "G03", "G04", "G05", "G06", "G07", "G08", "G09", "G10", "G11"
+  ],
+  "started_at": "2026-07-18T00:00:00Z",
+  "source": {
+    "rust_revision": "working-tree based on 5fc84ab8394837f834f28c137ebe459db8a15e75",
+    "openbsw_revision": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "environment": {
+    "os": "Windows host, pinned Debian container, WSL oracle, STM32F413/G474 targets",
+    "rust": "1.94.0; nightly-2026-03-14 for Miri and fuzzing",
+    "python": "3.14.3"
+  },
+  "commands": [
+    "cargo fmt --all -- --check",
+    "cargo fmt --manifest-path fuzz/Cargo.toml -- --check",
+    "cargo fmt --manifest-path tools/resource-probe/Cargo.toml -- --check",
+    "cargo test --workspace --exclude bsw-bsp-stm32 --all-features",
+    "cargo test -p bsw-bsp-stm32 --lib",
+    "cargo clippy --workspace --exclude bsw-bsp-stm32 --all-targets --all-features -- -D warnings",
+    "cargo check -p bsw-bsp-stm32 --no-default-features --features stm32f413 --target thumbv7em-none-eabihf",
+    "cargo check -p bsw-bsp-stm32 --examples --no-default-features --features stm32f413 --target thumbv7em-none-eabihf",
+    "cargo clippy -p bsw-bsp-stm32 --lib --no-default-features --features stm32f413 --target thumbv7em-none-eabihf -- -D warnings",
+    "cargo check -p bsw-bsp-stm32 --no-default-features --features stm32g474 --target thumbv7em-none-eabihf",
+    "cargo check -p bsw-bsp-stm32 --examples --no-default-features --features stm32g474 --target thumbv7em-none-eabihf",
+    "cargo clippy -p bsw-bsp-stm32 --lib --no-default-features --features stm32g474 --target thumbv7em-none-eabihf -- -D warnings",
+    "python tools/port/check_features.py",
+    "python tools/port/check_no_std.py",
+    "python tools/port/check_dependencies.py",
+    "python tools/port/check_stm32_examples.py",
+    "tools/port/check_generated.ps1",
+    "python tools/port/generate_status.py --check docs/port/status.md",
+    "python tools/port/inventory_unsafe.py --check",
+    "python tools/port/validate_evidence.py",
+    "tools/port/measure_resources.ps1 -Check",
+    "docker run rust:1.94-bookworm cargo test --workspace --exclude bsw-bsp-stm32 --all-features",
+    "docker run --privileged rust:1.94-bookworm provision-vcan-and-test-socketcan",
+    "cargo run -p openbsw-reference-app -- --workflows",
+    "cargo run -p openbsw-reference-app -- --oracle",
+    "python tools/port/compare_oracle.py <openbsw-fixture> <rust-fixture> (seven fixture pairs)",
+    "tools/port/openbsw_oracle.ps1 -Action Test -Jobs 4",
+    "cargo +nightly-2026-03-14 miri test -p bsw-bsp-stm32 --lib can_isr::tests",
+    "cargo +nightly-2026-03-14 fuzz run doip_tcp -- -runs=100",
+    "cargo +nightly-2026-03-14 fuzz run doip_diagnostic -- -runs=100",
+    "probe-rs download --chip STM32G474RE --probe $G474_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/nvm_test_g474",
+    "probe-rs download --chip STM32G474RE --probe $G474_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/app_g474",
+    "probe-rs download --chip STM32F413ZH --probe $F413_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/app_f413",
+    "physical UART result checks for G474 storage, G474 application, and F413 application"
+  ],
+  "results": {
+    "outcome": "passed",
+    "passed": 34,
+    "failed": 0,
+    "skipped": 3,
+    "errors": 0
+  },
+  "artifacts": [
+    {"name": "nvm_test_g474", "sha256": "00ccf5b228a57dc6e66ebee777ee5f7214ab98e151ae5cdad104e727ed76558a"},
+    {"name": "app_g474", "sha256": "a774adf6fcd259411fd64b15852ae6b8ce06a68f5d9815c0f9129fcf9ba9765f"},
+    {"name": "app_f413", "sha256": "6f60dbe277d05080713a018eea4540f870dca9b912727793997b08eea01bd418"}
+  ],
+  "hil": {
+    "boards": ["nucleo-g474re", "nucleo-f413zh"],
+    "probe_class": "ST-Link",
+    "reset_method": "debug-probe system reset",
+    "fixture_revision": "workspace-board-fixture",
+    "isolation": "one board selected by environment-provided probe identifier per run",
+    "storage_region": "linker-reserved top 8 KiB on G474"
+  }
+}

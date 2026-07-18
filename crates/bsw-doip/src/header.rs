@@ -43,8 +43,8 @@ impl DoIpHeader {
     /// byte does not match, or the payload type is unrecognised.
     pub fn parse(data: &[u8; 8]) -> Result<Self, HeaderError> {
         // Octet 1: version
-        let version = ProtocolVersion::from_byte(data[0])
-            .ok_or(HeaderError::InvalidVersion(data[0]))?;
+        let version =
+            ProtocolVersion::from_byte(data[0]).ok_or(HeaderError::InvalidVersion(data[0]))?;
 
         // Octet 2: ~version
         if data[1] != version.inverted() {
@@ -150,7 +150,10 @@ mod tests {
     #[test]
     fn parse_invalid_version() {
         let raw = make_header(0xFF, 0x0005, 7);
-        assert_eq!(DoIpHeader::parse(&raw), Err(HeaderError::InvalidVersion(0xFF)));
+        assert_eq!(
+            DoIpHeader::parse(&raw),
+            Err(HeaderError::InvalidVersion(0xFF))
+        );
     }
 
     #[test]
@@ -159,14 +162,20 @@ mod tests {
         let raw = [0x02u8, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x07];
         assert_eq!(
             DoIpHeader::parse(&raw),
-            Err(HeaderError::VersionMismatch { version: 0x02, inverted: 0x00 })
+            Err(HeaderError::VersionMismatch {
+                version: 0x02,
+                inverted: 0x00
+            })
         );
     }
 
     #[test]
     fn parse_unknown_payload_type() {
         let raw = make_header(0x02, 0x0099, 0);
-        assert_eq!(DoIpHeader::parse(&raw), Err(HeaderError::UnknownPayloadType(0x0099)));
+        assert_eq!(
+            DoIpHeader::parse(&raw),
+            Err(HeaderError::UnknownPayloadType(0x0099))
+        );
     }
 
     #[test]

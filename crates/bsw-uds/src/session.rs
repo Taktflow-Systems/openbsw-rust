@@ -152,11 +152,19 @@ mod tests {
 
     #[test]
     fn to_mask_roundtrip() {
-        for session in [DiagSession::Default, DiagSession::Programming, DiagSession::Extended] {
+        for session in [
+            DiagSession::Default,
+            DiagSession::Programming,
+            DiagSession::Extended,
+        ] {
             let mask = session.to_mask();
             assert!(mask.contains(session));
             // Each mask has exactly one bit set — no other session is contained.
-            for other in [DiagSession::Default, DiagSession::Programming, DiagSession::Extended] {
+            for other in [
+                DiagSession::Default,
+                DiagSession::Programming,
+                DiagSession::Extended,
+            ] {
                 if other == session {
                     assert!(mask.contains(other));
                 } else {

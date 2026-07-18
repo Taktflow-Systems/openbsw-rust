@@ -580,4 +580,3 @@ mod tests {
         assert_eq!(t.add_listener(), ErrorCode::Ok);
     }
 }
-

@@ -20,12 +20,14 @@
 
 pub mod big_endian;
 pub mod bitset;
+pub mod bounded_string;
 pub mod forward_list;
 pub mod object_pool;
 pub mod ordered_map;
 pub mod vec;
 
 pub use bitset::Bitset;
+pub use bounded_string::{BoundedString, CapacityError};
 pub use forward_list::ForwardList;
 pub use object_pool::ObjectPool;
 pub use ordered_map::OrderedMap;

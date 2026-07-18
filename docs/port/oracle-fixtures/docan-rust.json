@@ -1,0 +1,13 @@
+{
+  "protocol_version": 1,
+  "scenario": "docan-state-machine",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "records": [
+    {"sequence": 0, "kind": "tx", "source": "rust", "input": "start:20", "output": "first-frame", "state": "wait-confirmation"},
+    {"sequence": 1, "kind": "tx", "source": "rust", "input": "confirm", "output": "none", "state": "wait-flow-control"},
+    {"sequence": 2, "kind": "tx", "source": "rust", "input": "cts:bs=2,stmin=5ms", "output": "none", "state": "wait-separation"},
+    {"sequence": 3, "kind": "tx", "source": "rust", "input": "clock:5ms", "output": "consecutive-frame:1", "state": "wait-confirmation"},
+    {"sequence": 4, "kind": "rx", "source": "rust", "input": "first-frame:20", "output": "flow-control:cts", "state": "wait-consecutive"},
+    {"sequence": 5, "kind": "rx", "source": "rust", "input": "consecutive-frame:2", "output": "wrong-sequence", "state": "failed"}
+  ]
+}

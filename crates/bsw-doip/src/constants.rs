@@ -371,8 +371,14 @@ mod tests {
 
     #[test]
     fn payload_type_from_u16() {
-        assert_eq!(PayloadType::from_u16(0x0001), Some(PayloadType::VehicleIdentificationRequest));
-        assert_eq!(PayloadType::from_u16(0x8001), Some(PayloadType::DiagnosticMessage));
+        assert_eq!(
+            PayloadType::from_u16(0x0001),
+            Some(PayloadType::VehicleIdentificationRequest)
+        );
+        assert_eq!(
+            PayloadType::from_u16(0x8001),
+            Some(PayloadType::DiagnosticMessage)
+        );
         assert_eq!(PayloadType::from_u16(0xFFFF), None);
     }
 
@@ -388,7 +394,10 @@ mod tests {
     fn diag_nack_values() {
         assert_eq!(DiagNackCode::Success.as_byte(), 0x00);
         assert_eq!(DiagNackCode::TransportProtocolError.as_byte(), 0x08);
-        assert_eq!(DiagNackCode::from_byte(0x06), Some(DiagNackCode::TargetUnreachable));
+        assert_eq!(
+            DiagNackCode::from_byte(0x06),
+            Some(DiagNackCode::TargetUnreachable)
+        );
         assert_eq!(DiagNackCode::from_byte(0x01), None); // reserved
     }
 
@@ -477,7 +486,11 @@ mod tests {
         for (i, &a) in types.iter().enumerate() {
             for (j, &b) in types.iter().enumerate() {
                 if i != j {
-                    assert_ne!(a.as_u16(), b.as_u16(), "duplicate discriminant at indices {i} and {j}");
+                    assert_ne!(
+                        a.as_u16(),
+                        b.as_u16(),
+                        "duplicate discriminant at indices {i} and {j}"
+                    );
                 }
             }
         }

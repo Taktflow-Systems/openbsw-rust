@@ -130,13 +130,13 @@ const BRR_115200: u32 = 1476;
 #[inline(always)]
 unsafe fn reg_read(base: usize, offset: usize) -> u32 {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::read_volatile((base + offset) as *const u32) }
+    unsafe { crate::mmio::read((base + offset) as *const u32) }
 }
 
 #[inline(always)]
 unsafe fn reg_write(base: usize, offset: usize, val: u32) {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::write_volatile((base + offset) as *mut u32, val) }
+    unsafe { crate::mmio::write((base + offset) as *mut u32, val) }
 }
 
 #[inline(always)]
@@ -184,6 +184,11 @@ pub struct PolledUart {
 }
 
 impl PolledUart {
+    /// Create USART2 from the typed board ownership token.
+    pub const fn from_token(_token: crate::board::Uart) -> Self {
+        Self::new()
+    }
+
     /// Creates a new, uninitialised UART handle.
     ///
     /// Call [`init()`](Self::init) before using any TX/RX methods.
@@ -229,8 +234,8 @@ impl PolledUart {
             reg_modify(
                 GPIOA_BASE,
                 GPIO_MODER_OFFSET,
-                (0b11 << 4) | (0b11 << 6),    // clear
-                (0b10 << 4) | (0b10 << 6),     // set AF mode
+                (0b11 << 4) | (0b11 << 6), // clear
+                (0b10 << 4) | (0b10 << 6), // set AF mode
             );
             // High speed for PA2 and PA3
             reg_modify(
@@ -296,8 +301,22 @@ impl PolledUart {
             // Wait for TXE (TX data register empty).
             while (reg_read(USART2_BASE, USART_ISR_OFFSET) & ISR_TXE) == 0 {}
             // Write the byte.  Only the low 8 bits are used (9-bit field, M=0).
-            reg_write(USART2_BASE, USART_TDR_OFFSET, byte as u32);
+            reg_write(USART2_BASE, USART_TDR_OFFSET, u32::from(byte));
         }
+    }
+
+    /// Attempt one byte without spinning on TXE.
+    pub fn try_write_byte(&mut self, byte: u8) -> bool {
+        if !self.initialised {
+            return false;
+        }
+        unsafe {
+            if (reg_read(USART2_BASE, USART_ISR_OFFSET) & ISR_TXE) == 0 {
+                return false;
+            }
+            reg_write(USART2_BASE, USART_TDR_OFFSET, u32::from(byte));
+        }
+        true
     }
 
     /// Transmit a byte slice, blocking for each byte.
@@ -394,6 +413,20 @@ impl PolledUart {
     #[inline]
     pub const fn is_initialised(&self) -> bool {
         self.initialised
+    }
+}
+
+impl bsw_console::chario::CharOutput for PolledUart {
+    fn try_write(&mut self, byte: u8) -> Result<(), bsw_console::chario::CharOutError> {
+        self.try_write_byte(byte)
+            .then_some(())
+            .ok_or(bsw_console::chario::CharOutError::Busy)
+    }
+}
+
+impl bsw_console::chario::CharInput for PolledUart {
+    fn try_read(&mut self) -> Option<u8> {
+        self.read_byte()
     }
 }
 

@@ -52,12 +52,30 @@ mod codec_segmentation {
 
     #[test]
     fn frame_type_detection_all_types() {
-        assert_eq!(decode_frame_type(&[0x05, 0, 0], &cfg()), Ok(FrameType::Single));
-        assert_eq!(decode_frame_type(&[0x10, 0x0A, 0, 0, 0, 0, 0, 0], &cfg()), Ok(FrameType::First));
-        assert_eq!(decode_frame_type(&[0x21, 0, 0], &cfg()), Ok(FrameType::Consecutive));
-        assert_eq!(decode_frame_type(&[0x30, 0, 0], &cfg()), Ok(FrameType::FlowControl));
-        assert_eq!(decode_frame_type(&[0x40], &cfg()), Err(CodecResult::InvalidFrameType));
-        assert_eq!(decode_frame_type(&[0xF0], &cfg()), Err(CodecResult::InvalidFrameType));
+        assert_eq!(
+            decode_frame_type(&[0x05, 0, 0], &cfg()),
+            Ok(FrameType::Single)
+        );
+        assert_eq!(
+            decode_frame_type(&[0x10, 0x0A, 0, 0, 0, 0, 0, 0], &cfg()),
+            Ok(FrameType::First)
+        );
+        assert_eq!(
+            decode_frame_type(&[0x21, 0, 0], &cfg()),
+            Ok(FrameType::Consecutive)
+        );
+        assert_eq!(
+            decode_frame_type(&[0x30, 0, 0], &cfg()),
+            Ok(FrameType::FlowControl)
+        );
+        assert_eq!(
+            decode_frame_type(&[0x40], &cfg()),
+            Err(CodecResult::InvalidFrameType)
+        );
+        assert_eq!(
+            decode_frame_type(&[0xF0], &cfg()),
+            Err(CodecResult::InvalidFrameType)
+        );
     }
 
     // -- First Frame normal (12-bit length) encode/decode --
@@ -188,21 +206,30 @@ mod codec_segmentation {
     fn decode_frame_too_short_for_flow_control() {
         // FC needs 3 bytes minimum
         let data = [0x30, 0x00];
-        assert_eq!(decode_frame(&data, &cfg()), Err(CodecResult::InvalidFrameSize));
+        assert_eq!(
+            decode_frame(&data, &cfg()),
+            Err(CodecResult::InvalidFrameSize)
+        );
     }
 
     #[test]
     fn decode_frame_invalid_flow_status() {
         // FC status nibble 0x3 (0x33) is invalid
         let data = [0x33, 0x00, 0x00, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC];
-        assert_eq!(decode_frame(&data, &cfg()), Err(CodecResult::InvalidFrameType));
+        assert_eq!(
+            decode_frame(&data, &cfg()),
+            Err(CodecResult::InvalidFrameType)
+        );
     }
 
     // -- PCI offset (normal addressing) --
 
     #[test]
     fn pci_offset_shifts_frame_encoding() {
-        let cfg_offset = CodecConfig { pci_offset: 1, filler_byte: 0xAA };
+        let cfg_offset = CodecConfig {
+            pci_offset: 1,
+            filler_byte: 0xAA,
+        };
         let mut buf = [0u8; 8];
         let payload = [0x11, 0x22, 0x33];
         let n = encode_single_frame(&mut buf, &payload, &cfg_offset).unwrap();
@@ -215,7 +242,10 @@ mod codec_segmentation {
 
     #[test]
     fn custom_filler_byte_in_flow_control() {
-        let cfg_custom = CodecConfig { pci_offset: 0, filler_byte: 0x55 };
+        let cfg_custom = CodecConfig {
+            pci_offset: 0,
+            filler_byte: 0x55,
+        };
         let mut buf = [0u8; 8];
         encode_flow_control(&mut buf, FlowStatus::ContinueToSend, 0, 0, &cfg_custom).unwrap();
         assert!(buf[3..].iter().all(|&b| b == 0x55));
@@ -324,7 +354,7 @@ mod multiframe_assembly {
             let cfs = if size <= 6 {
                 0
             } else {
-                ((size as usize - 6) + 6) / 7 // ceil division
+                (size as usize - 6).div_ceil(7)
             };
             let manual = if size <= 6 { 1 } else { 1 + cfs as u32 };
             assert_eq!(
@@ -770,7 +800,7 @@ mod separation_time_params {
             let decoded = decode_separation_time(encoded);
             assert_eq!(decoded, us, "Failed for {us} µs");
             // Verify encoded byte is in F1-F9 range
-            assert!(encoded >= 0xF1 && encoded <= 0xF9);
+            assert!((0xF1..=0xF9).contains(&encoded));
         }
     }
 
@@ -784,10 +814,18 @@ mod separation_time_params {
     #[test]
     fn decode_reserved_ranges_return_max() {
         for byte in 0x80..=0xF0 {
-            assert_eq!(decode_separation_time(byte), 127_000, "Reserved byte 0x{byte:02X}");
+            assert_eq!(
+                decode_separation_time(byte),
+                127_000,
+                "Reserved byte 0x{byte:02X}"
+            );
         }
         for byte in 0xFA..=0xFF {
-            assert_eq!(decode_separation_time(byte), 127_000, "Reserved byte 0x{byte:02X}");
+            assert_eq!(
+                decode_separation_time(byte),
+                127_000,
+                "Reserved byte 0x{byte:02X}"
+            );
         }
     }
 

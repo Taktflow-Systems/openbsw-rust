@@ -462,7 +462,7 @@ mod tests {
     #[test]
     fn interval_add_extends_range() {
         let mut f = IntervalFilter::with_range(10, 20);
-        f.add(5);  // extend lower
+        f.add(5); // extend lower
         f.add(25); // extend upper
         assert_eq!(f.lower_bound(), 5);
         assert_eq!(f.upper_bound(), 25);

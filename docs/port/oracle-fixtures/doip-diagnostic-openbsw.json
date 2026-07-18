@@ -1,0 +1,10 @@
+{
+  "protocol_version": 1,
+  "scenario": "doip-diagnostic-acknowledgement",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "records": [
+    {"sequence": 0, "kind": "tcp", "source": "openbsw", "input": "02fd8001000000071234077e112233", "output": "02fd800200000008077e123400112233", "state": "message-delivered"},
+    {"sequence": 1, "kind": "tcp", "source": "openbsw", "input": "invalid-target", "output": "02fd800300000008077e123403112233", "state": "active"},
+    {"sequence": 2, "kind": "tcp", "source": "openbsw", "input": "listener-error", "output": "02fd800300000008077e123408112233", "state": "active"}
+  ]
+}

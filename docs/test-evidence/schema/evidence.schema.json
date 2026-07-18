@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/openbsw-rust/evidence.schema.json",
+  "title": "OpenBSW Rust test evidence",
+  "type": "object",
+  "required": ["schema_version", "evidence_id", "package_ids", "started_at", "source", "environment", "commands", "results", "artifacts"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "evidence_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+    "package_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "started_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "required": ["rust_revision", "openbsw_revision"],
+      "properties": {
+        "rust_revision": {"type": "string"},
+        "openbsw_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "environment": {"type": "object", "required": ["os", "rust", "python"]},
+    "commands": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "results": {
+      "type": "object",
+      "required": ["outcome", "passed", "failed", "skipped", "errors"],
+      "properties": {
+        "outcome": {"enum": ["passed", "failed", "incomplete"]},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "hil": {"type": "object"}
+  },
+  "additionalProperties": false
+}

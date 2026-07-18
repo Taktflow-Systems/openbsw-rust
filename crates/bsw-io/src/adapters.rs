@@ -155,6 +155,10 @@ pub struct ForwardingReader<R: Reader, W: Writer> {
     pub failed_allocations: usize,
     /// True while a successful peek/allocate/commit is outstanding.
     active: bool,
+    /// Whether the caller holds an un-released peek (interior state so the
+    /// `&self` peek can record it). Keeps release-without-peek a no-op, as
+    /// the [`Reader`] contract requires of built-in implementations.
+    peeked: core::cell::Cell<bool>,
 }
 
 impl<R: Reader, W: Writer> ForwardingReader<R, W> {
@@ -166,6 +170,7 @@ impl<R: Reader, W: Writer> ForwardingReader<R, W> {
             destination,
             failed_allocations: 0,
             active: false,
+            peeked: core::cell::Cell::new(false),
         }
     }
 
@@ -195,10 +200,16 @@ impl<R: Reader, W: Writer> Reader for ForwardingReader<R, W> {
         // happens in release() which requires &mut self.
         // We return source data directly; the copy to destination is deferred
         // to release() to avoid needing &mut self here.
-        self.source.peek()
+        let data = self.source.peek();
+        self.peeked.set(data.is_some());
+        data
     }
 
     fn release(&mut self) {
+        // Release without an outstanding peek is a no-op by contract.
+        if !self.peeked.replace(false) {
+            return;
+        }
         // Peek the source to find out how many bytes to forward.
         if let Some(src_data) = self.source.peek() {
             let len = src_data.len();
@@ -290,7 +301,11 @@ impl<R: Reader, const N: usize> Reader for JoinReader<R, N> {
         }
 
         // Determine which source to release.
-        let start = if self.current == usize::MAX { 0 } else { self.current };
+        let start = if self.current == usize::MAX {
+            0
+        } else {
+            self.current
+        };
 
         // Walk from `start` to find the first non-empty source.
         for offset in 0..N {
@@ -384,7 +399,8 @@ impl<W: Writer, const N: usize> Writer for SplitWriter<W, N> {
         self.active_mask = 0;
         self.alloc_size = 0;
 
-        if N == 0 || size == 0 || size > 256 {
+        let limit = Writer::max_size(self).min(256);
+        if N == 0 || size == 0 || size > limit {
             return None;
         }
 
@@ -590,7 +606,10 @@ mod tests {
         // Write two small messages — they stay in the internal buffer.
         assert!(write_bytes(&mut bw, b"ab"));
         // After commit but before flush, destination is still empty.
-        assert!(bw.inner().is_empty(), "destination should be empty before flush");
+        assert!(
+            bw.inner().is_empty(),
+            "destination should be empty before flush"
+        );
     }
 
     // ── 3. BufferedWriter flushes on overflow ──────────────────────────────────
@@ -602,7 +621,10 @@ mod tests {
 
         // Fill the buffer with 7 bytes (BUF_SIZE = 8).
         assert!(write_bytes(&mut bw, b"1234567"));
-        assert!(bw.inner().is_empty(), "destination still empty before flush");
+        assert!(
+            bw.inner().is_empty(),
+            "destination still empty before flush"
+        );
 
         // The next write (2 bytes) would overflow the 8-byte buffer, so a
         // flush to the destination should happen first.
@@ -633,7 +655,10 @@ mod tests {
         fr.release();
 
         // Destination should now contain the forwarded bytes.
-        let fwd = fr.destination().peek().expect("destination should have data");
+        let fwd = fr
+            .destination()
+            .peek()
+            .expect("destination should have data");
         assert_eq!(fwd, b"forward me");
         assert_eq!(fr.failed_allocations, 0);
     }
@@ -740,8 +765,14 @@ mod tests {
     #[test]
     fn split_writer_partial_failure() {
         let d0 = TestQueue::new(64);
-        // d1 only accepts 2-byte messages; a 5-byte write will fail for it.
-        let d1 = TestQueue::new(2);
+        // d1 shares the same message-size limit, but its buffer is almost
+        // full, so the broadcast cannot be duplicated into it. (A size above
+        // a destination's max_size is rejected up front by allocate — the
+        // documented most-constrained strategy — and never becomes a drop.)
+        let mut d1 = TestQueue::new(64);
+        for _ in 0..4 {
+            assert!(write_bytes(&mut d1, &[0u8; 63]));
+        }
         let mut sw = SplitWriter::new([d0, d1]);
 
         assert!(write_bytes(&mut sw, b"hello")); // d1 will reject
@@ -749,6 +780,16 @@ mod tests {
         assert_eq!(sw.sent[0], 1, "d0 should succeed");
         assert_eq!(sw.drops[1], 1, "d1 should report a drop");
         assert_eq!(sw.sent[1], 0, "d1 should not count a send");
+    }
+
+    #[test]
+    fn split_writer_rejects_sizes_above_most_constrained_destination() {
+        let d0 = TestQueue::new(64);
+        let d1 = TestQueue::new(2);
+        let mut sw = SplitWriter::new([d0, d1]);
+        assert_eq!(Writer::max_size(&sw), 2);
+        assert!(sw.allocate(5).is_none());
+        assert!(sw.allocate(2).is_some());
     }
 
     // ── 11. Empty queue peek returns None ─────────────────────────────────────

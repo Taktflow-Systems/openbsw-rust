@@ -38,8 +38,13 @@
 //! [`RX_QUEUE_SIZE`]-entry software circular buffer.  [`receive_isr`] must be
 //! called from the `USB_LP_CAN1_RX0` (or `CAN1_RX0`) interrupt handler.
 
-use bsw_can::transceiver::RX_QUEUE_SIZE;
-use bsw_can::{AbstractTransceiver, CanFrame, CanId, CanTransceiver, ErrorCode, State, TransceiverState};
+use crate::can_health::{CanHealth, CanInterruptFlags};
+use crate::can_isr::InterruptQueue;
+use bsw_can::{
+    AbstractTransceiver, CanFrame, CanId, CanTransceiver, ErrorCode, State, TransceiverState,
+};
+
+const RX_QUEUE_SIZE: usize = 32;
 use stm32f4xx_hal::pac;
 
 // ---------------------------------------------------------------------------
@@ -77,11 +82,8 @@ pub struct BxCanTransceiver {
     /// Abstract base: state machine, statistics, filter, bus identity.
     base: AbstractTransceiver<8>,
     /// Software receive queue (circular buffer, interrupt-filled).
-    rx_queue: [CanFrame; RX_QUEUE_SIZE],
-    /// Index of the oldest unconsumed frame.
-    rx_head: usize,
-    /// Number of frames currently in the queue.
-    rx_count: usize,
+    rx_queue: InterruptQueue<RX_QUEUE_SIZE>,
+    health: CanHealth,
 }
 
 // ---------------------------------------------------------------------------
@@ -89,17 +91,36 @@ pub struct BxCanTransceiver {
 // ---------------------------------------------------------------------------
 
 impl BxCanTransceiver {
+    /// Create the sole CAN1 driver from the typed board ownership token.
+    pub const fn from_token(_token: crate::board::Can1, bus_id: u8) -> Self {
+        Self::new(bus_id)
+    }
+
     /// Creates a new, uninitialised `BxCanTransceiver` for the given bus index.
     ///
     /// Call [`init`](Self::init) before any other operation.
     pub const fn new(bus_id: u8) -> Self {
         // CanFrame does not implement Copy, so we must use a const initialiser.
-        const EMPTY_FRAME: CanFrame = CanFrame::new();
         Self {
             base: AbstractTransceiver::new(bus_id),
-            rx_queue: [EMPTY_FRAME; RX_QUEUE_SIZE],
-            rx_head: 0,
-            rx_count: 0,
+            rx_queue: InterruptQueue::new(),
+            health: CanHealth::new(bsw_time::Duration::from_nanos(1_000_000_000)),
+        }
+    }
+
+    /// Service error/bus-off state using an injected monotonic timestamp.
+    pub fn service_health(&mut self, now: bsw_time::Instant) {
+        // SAFETY: CAN1 is uniquely owned by this driver.
+        let can = unsafe { &*pac::CAN1::ptr() };
+        let flags = CanInterruptFlags::from_bxcan(can.msr().read().bits(), can.esr().read().bits());
+        let state = self.health.handle(flags, now);
+        self.health.observe_queue_drops(self.rx_queue.dropped());
+        self.base.set_transceiver_state(state);
+        if self.health.poll_recovery(now) == Some(TransceiverState::Active) {
+            let _ = self.close();
+            let _ = self.init();
+            let _ = self.open();
+            self.base.set_transceiver_state(TransceiverState::Active);
         }
     }
 
@@ -123,11 +144,11 @@ impl BxCanTransceiver {
         while can.rf0r().read().fmp().bits() > 0 {
             // Read the three receive registers for mailbox 0 (RDT0R, RDL0R, RDH0R).
             let rir = can.rx(0).rir().read();
-            let rdtr = can.rx(0).rdtr().read();
-            let rdlr = can.rx(0).rdlr().read();
-            let rdhr = can.rx(0).rdhr().read();
+            let rx_data_length = can.rx(0).rdtr().read();
+            let payload_low = can.rx(0).rdlr().read();
+            let payload_high = can.rx(0).rdhr().read();
 
-            let dlc = (rdtr.dlc().bits() as u8).min(8);
+            let dlc = rx_data_length.dlc().bits().min(8);
             let ide = rir.ide().bit_is_set();
 
             let raw_id = if ide {
@@ -140,8 +161,8 @@ impl BxCanTransceiver {
 
             // Pack payload from the two 32-bit data registers (little-endian).
             let mut data = [0u8; 8];
-            let lo = rdlr.bits();
-            let hi = rdhr.bits();
+            let lo = payload_low.bits();
+            let hi = payload_high.bits();
             data[0] = (lo & 0xFF) as u8;
             data[1] = ((lo >> 8) & 0xFF) as u8;
             data[2] = ((lo >> 16) & 0xFF) as u8;
@@ -156,12 +177,8 @@ impl BxCanTransceiver {
             can.rf0r().modify(|_, w| w.rfom().release());
 
             // Store in the software circular buffer.
-            if self.rx_count < RX_QUEUE_SIZE {
-                let tail = (self.rx_head + self.rx_count) % RX_QUEUE_SIZE;
-                let frame = &mut self.rx_queue[tail];
-                frame.set_id(CanId::id(raw_id, ide));
-                frame.set_payload(&data[..dlc as usize]);
-                self.rx_count += 1;
+            let frame = CanFrame::with_data(CanId::id(raw_id, ide), &data[..dlc as usize]);
+            if self.rx_queue.push(frame) {
                 self.base.statistics_mut().rx += 1;
             } else {
                 // Queue full — drop frame and count it.
@@ -216,13 +233,7 @@ impl BxCanTransceiver {
     /// Call from task context (not ISR) with interrupts disabled around the
     /// head/count manipulation, or use [`InterruptLock`] from `bsw-can`.
     pub fn dequeue_frame(&mut self) -> Option<CanFrame> {
-        if self.rx_count == 0 {
-            return None;
-        }
-        let frame = self.rx_queue[self.rx_head].clone();
-        self.rx_head = (self.rx_head + 1) % RX_QUEUE_SIZE;
-        self.rx_count -= 1;
-        Some(frame)
+        self.rx_queue.pop()
     }
 
     // -----------------------------------------------------------------------
@@ -289,7 +300,8 @@ impl BxCanTransceiver {
     /// CAN1 clock must be enabled before calling this.
     unsafe fn enter_init_mode(can: &pac::can1::RegisterBlock) {
         // Exit sleep mode (SLEEP bit) and request init mode (INRQ bit).
-        can.mcr().modify(|_, w| w.sleep().clear_bit().inrq().set_bit());
+        can.mcr()
+            .modify(|_, w| w.sleep().clear_bit().inrq().set_bit());
         // Wait for INAK in MSR.
         while can.msr().read().inak().bit_is_clear() {}
     }
@@ -317,10 +329,10 @@ impl BxCanTransceiver {
         //   [25:24] SJW   — sync jump width  (value = sjw - 1)
         //   [30]    LBKM  — loopback mode
         //   [31]    SILM  — silent mode
-        let brp = (BIT_TIMING_PSC - 1) as u32;
-        let ts1 = (BIT_TIMING_BS1 - 1) as u32;
-        let ts2 = (BIT_TIMING_BS2 - 1) as u32;
-        let sjw = (BIT_TIMING_SJW - 1) as u32;
+        let brp = u32::from(BIT_TIMING_PSC - 1);
+        let ts1 = u32::from(BIT_TIMING_BS1 - 1);
+        let ts2 = u32::from(BIT_TIMING_BS2 - 1);
+        let sjw = u32::from(BIT_TIMING_SJW - 1);
         let btr_val = brp | (ts1 << 16) | (ts2 << 20) | (sjw << 24);
         // SAFETY: all fields are within their documented bit-widths.
         can.btr().write(|w| unsafe { w.bits(btr_val) });
@@ -401,7 +413,8 @@ impl CanTransceiver for BxCanTransceiver {
             Self::set_bit_timing(can);
             Self::configure_accept_all_filter(can);
             // Disable automatic bus-off recovery and automatic wakeup.
-            can.mcr().modify(|_, w| w.abom().clear_bit().awum().clear_bit());
+            can.mcr()
+                .modify(|_, w| w.abom().clear_bit().awum().clear_bit());
         }
 
         self.base.transition_to_initialized()
@@ -411,7 +424,8 @@ impl CanTransceiver for BxCanTransceiver {
     fn shutdown(&mut self) {
         // SAFETY: always safe to enter sleep mode.
         let can = unsafe { &*pac::CAN1::ptr() };
-        can.mcr().modify(|_, w| w.sleep().set_bit().inrq().clear_bit());
+        can.mcr()
+            .modify(|_, w| w.sleep().set_bit().inrq().clear_bit());
         self.base.transition_to_closed();
     }
 
@@ -426,11 +440,13 @@ impl CanTransceiver for BxCanTransceiver {
         let can = unsafe { &*pac::CAN1::ptr() };
         unsafe {
             // Clear silent/loopback bits to go on the live bus.
-            can.btr().modify(|r, w| w.bits(r.bits() & !(1 << 30 | 1 << 31)));
+            can.btr()
+                .modify(|r, w| w.bits(r.bits() & !(1 << 30 | 1 << 31)));
             Self::leave_init_mode(can);
             // Enable FIFO0 message-pending interrupt (FMPIE0) and TX mailbox
             // empty interrupt (TMEIE).
-            can.ier().modify(|_, w| w.fmpie0().set_bit().tmeie().set_bit());
+            can.ier()
+                .modify(|_, w| w.fmpie0().set_bit().tmeie().set_bit());
         }
 
         self.base.transition_to_open()
@@ -451,7 +467,8 @@ impl CanTransceiver for BxCanTransceiver {
     fn close(&mut self) -> ErrorCode {
         let can = unsafe { &*pac::CAN1::ptr() };
         unsafe {
-            can.ier().modify(|_, w| w.fmpie0().clear_bit().tmeie().clear_bit());
+            can.ier()
+                .modify(|_, w| w.fmpie0().clear_bit().tmeie().clear_bit());
             Self::enter_init_mode(can);
         }
         self.base.transition_to_closed()
@@ -528,12 +545,9 @@ impl CanTransceiver for BxCanTransceiver {
 
         let can = unsafe { &*pac::CAN1::ptr() };
 
-        let mb = match Self::find_empty_mailbox(can) {
-            Some(i) => i,
-            None => {
-                self.base.statistics_mut().tx_dropped += 1;
-                return ErrorCode::TxHwQueueFull;
-            }
+        let Some(mb) = Self::find_empty_mailbox(can) else {
+            self.base.statistics_mut().tx_dropped += 1;
+            return ErrorCode::TxHwQueueFull;
         };
 
         let id = frame.id();
@@ -542,11 +556,11 @@ impl CanTransceiver for BxCanTransceiver {
 
         // Pack up to 8 payload bytes into two 32-bit words.
         let get = |i: usize| if i < data.len() { data[i] } else { 0 };
-        let tdlr: u32 = u32::from(get(0))
+        let payload_low: u32 = u32::from(get(0))
             | (u32::from(get(1)) << 8)
             | (u32::from(get(2)) << 16)
             | (u32::from(get(3)) << 24);
-        let tdhr: u32 = u32::from(get(4))
+        let payload_high: u32 = u32::from(get(4))
             | (u32::from(get(5)) << 8)
             | (u32::from(get(6)) << 16)
             | (u32::from(get(7)) << 24);
@@ -563,8 +577,8 @@ impl CanTransceiver for BxCanTransceiver {
         // SAFETY: single-writer to a free mailbox selected by TMEx bits in TSR.
         unsafe {
             can.tx(mb).tdtr().write(|w| w.dlc().bits(dlc));
-            can.tx(mb).tdlr().write(|w| w.bits(tdlr));
-            can.tx(mb).tdhr().write(|w| w.bits(tdhr));
+            can.tx(mb).tdlr().write(|w| w.bits(payload_low));
+            can.tx(mb).tdhr().write(|w| w.bits(payload_high));
             // Set TXRQ (bit 0) last to arm transmission.
             can.tx(mb).tir().write(|w| w.bits(tir | 1));
         }
@@ -586,8 +600,7 @@ impl CanTransceiver for BxCanTransceiver {
     }
 }
 
-// Implement CanReceiver for DiagCanTransport integration.
-impl crate::diag_can::CanReceiver for BxCanTransceiver {
+impl bsw_can::listener::FrameSource for BxCanTransceiver {
     fn receive(&mut self) -> Option<bsw_can::frame::CanFrame> {
         self.dequeue_frame()
     }

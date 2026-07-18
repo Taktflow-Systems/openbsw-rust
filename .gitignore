@@ -1,3 +1,4 @@
 /target
+/tools/resource-probe/target/
 *.exe
 *.pdb

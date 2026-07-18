@@ -62,8 +62,9 @@
 //!
 //! RM0440 Rev 8, chapter 44 (FDCAN).
 
-use bsw_can::frame::CanFrame;
+use crate::can_health::{CanHealth, CanInterruptFlags};
 use bsw_can::can_id::CanId;
+use bsw_can::frame::CanFrame;
 use bsw_can::transceiver::{
     AbstractTransceiver, CanTransceiver, ErrorCode, State, TransceiverState,
 };
@@ -87,29 +88,25 @@ const FDCAN_NBTP_OFFSET: usize = 0x01C; // Nominal bit timing
 const FDCAN_RXGFC_OFFSET: usize = 0x080; // Global filter config (STM32G4: replaces SIDFC/XIDFC/RXF0C/RXF1C)
 const FDCAN_RXF0S_OFFSET: usize = 0x090; // RX FIFO 0 status       (STM32G4: 0x090, not 0x0A4)
 const FDCAN_RXF0A_OFFSET: usize = 0x094; // RX FIFO 0 acknowledge  (STM32G4: 0x094, not 0x0A8)
-const FDCAN_TXBC_OFFSET:  usize = 0x0C0; // TX buffer config        (STM32G4: 0x0C0, not 0x0C4)
+const FDCAN_TXBC_OFFSET: usize = 0x0C0; // TX buffer config        (STM32G4: 0x0C0, not 0x0C4)
 const FDCAN_TXFQS_OFFSET: usize = 0x0C4; // TX FIFO/queue status    (STM32G4: 0x0C4, not 0x0C8)
 const FDCAN_TXBAR_OFFSET: usize = 0x0CC; // TX buffer add request   (STM32G4: 0x0CC, not 0x0D0)
-const FDCAN_IR_OFFSET: usize = 0x050;   // Interrupt register
-const FDCAN_IE_OFFSET: usize = 0x054;   // Interrupt enable
-const FDCAN_ILS_OFFSET: usize = 0x058;  // Interrupt line select
-const FDCAN_ILE_OFFSET: usize = 0x05C;  // Interrupt line enable
-const FDCAN_PSR_OFFSET: usize = 0x044;  // Protocol status register
-// NOTE: SIDFC (0x084), XIDFC (0x088), RXF0C (0x0A0), RXF1C (0x0B0), and
-// TXEFC (0x0F0) do NOT exist on STM32G4.  Those addresses are XIDAM, HPMS,
-// reserved, reserved, and TXEFA respectively.  MRAM layout on STM32G4 is
-// hardware-fixed and configured only via TXBC and RXGFC.
+const FDCAN_IR_OFFSET: usize = 0x050; // Interrupt register
+const FDCAN_IE_OFFSET: usize = 0x054; // Interrupt enable
+const FDCAN_ILS_OFFSET: usize = 0x058; // Interrupt line select
+const FDCAN_ILE_OFFSET: usize = 0x05C; // Interrupt line enable
+const FDCAN_PSR_OFFSET: usize = 0x044; // Protocol status register
+                                       // NOTE: SIDFC (0x084), XIDFC (0x088), RXF0C (0x0A0), RXF1C (0x0B0), and
+                                       // TXEFC (0x0F0) do NOT exist on STM32G4.  Those addresses are XIDAM, HPMS,
+                                       // reserved, reserved, and TXEFA respectively.  MRAM layout on STM32G4 is
+                                       // hardware-fixed and configured only via TXBC and RXGFC.
 
 // ---------------------------------------------------------------------------
 // Message RAM offsets (byte offsets from SRAMCAN_BASE for FDCAN1)
 // ---------------------------------------------------------------------------
 
-const MRAM_STDFILTER_OFFSET: usize = 0x000; // 28 × 1 word  std filters
-const MRAM_EXTFILTER_OFFSET: usize = 0x070; // 8  × 2 words ext filters
-const MRAM_RXF0_OFFSET:      usize = 0x0B0; // 3  × 18 words RX FIFO 0 elements  (3 × 72 B = 216 B)
-const MRAM_RXF1_OFFSET:      usize = 0x188; // 3  × 18 words RX FIFO 1 elements  (STM32G4: was 0x0E0)
-const MRAM_TXEVT_OFFSET:     usize = 0x260; // 3  × 2  words TX event FIFO        (STM32G4: was 0x110)
-const MRAM_TXBUF_OFFSET:     usize = 0x278; // 3  × 18 words TX buffer elements   (STM32G4: was 0x128)
+const MRAM_RXF0_OFFSET: usize = 0x0B0; // 3  × 18 words RX FIFO 0 elements  (3 × 72 B = 216 B)
+const MRAM_TXBUF_OFFSET: usize = 0x278; // 3  × 18 words TX buffer elements   (STM32G4: was 0x128)
 
 /// Byte stride between consecutive RX/TX MRAM elements on STM32G4.
 ///
@@ -174,10 +171,10 @@ const CCCR_DAR: u32 = 1 << 6;
 /// NSJW=4 (field=4−1=3).
 /// Bit time = 1 + 14 + 5 = 20 TQ @ 10 MHz = 500 kbit/s.
 const NBTP_500KBPS: u32 = {
-    let nbrp: u32 = 16;     // prescaler − 1
-    let ntseg1: u32 = 14;   // Tseg1 − 1 = 15 − 1  (matches .ioc NominalTimeSeg1=15)
-    let ntseg2: u32 = 3;    // Tseg2 − 1 = 4 − 1  (bits [14:8])
-    let nsjw: u32 = 3;      // SJW − 1 = 4 − 1  (bits [31:25])
+    let nbrp: u32 = 16; // prescaler − 1
+    let ntseg1: u32 = 14; // Tseg1 − 1 = 15 − 1  (matches .ioc NominalTimeSeg1=15)
+    let ntseg2: u32 = 3; // Tseg2 − 1 = 4 − 1  (bits [14:8])
+    let nsjw: u32 = 3; // SJW − 1 = 4 − 1  (bits [31:25])
     (nsjw << 25) | (nbrp << 16) | (ntseg1 << 8) | ntseg2
 };
 
@@ -257,13 +254,13 @@ const fn rxf0_elem_addr(i: usize) -> usize {
 #[inline(always)]
 unsafe fn reg_read(base: usize, offset: usize) -> u32 {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::read_volatile((base + offset) as *const u32) }
+    unsafe { crate::mmio::read((base + offset) as *const u32) }
 }
 
 #[inline(always)]
 unsafe fn reg_write(base: usize, offset: usize, val: u32) {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::write_volatile((base + offset) as *mut u32, val) }
+    unsafe { crate::mmio::write((base + offset) as *mut u32, val) }
 }
 
 #[inline(always)]
@@ -276,14 +273,14 @@ unsafe fn reg_modify(base: usize, offset: usize, mask: u32, bits: u32) {
 #[inline(always)]
 unsafe fn mram_read(addr: usize) -> u32 {
     // SAFETY: caller guarantees the address is inside message RAM.
-    unsafe { core::ptr::read_volatile(addr as *const u32) }
+    unsafe { crate::mmio::read(addr as *const u32) }
 }
 
 /// Write a 32-bit word to an absolute MMIO address (message RAM).
 #[inline(always)]
 unsafe fn mram_write(addr: usize, val: u32) {
     // SAFETY: caller guarantees the address is inside message RAM.
-    unsafe { core::ptr::write_volatile(addr as *mut u32, val) }
+    unsafe { crate::mmio::write(addr as *mut u32, val) }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +289,7 @@ unsafe fn mram_write(addr: usize, val: u32) {
 
 /// RX software ring-buffer depth.
 pub const RX_QUEUE_SIZE: usize = 16;
+use crate::can_isr::InterruptQueue;
 
 /// TX buffer count in message RAM (hardware limit).
 const TX_BUF_COUNT: usize = 3;
@@ -321,14 +319,16 @@ pub struct FdCanTransceiver {
     /// Hardware-independent state, filter, and statistics.
     base: AbstractTransceiver<8>,
     /// Software RX ring-buffer (frames copied out of message RAM in the ISR).
-    rx_queue: [CanFrame; RX_QUEUE_SIZE],
-    /// Write index (producer = ISR).
-    rx_head: usize,
-    /// Number of frames currently in the ring-buffer.
-    rx_count: usize,
+    rx_queue: InterruptQueue<RX_QUEUE_SIZE>,
+    health: CanHealth,
 }
 
 impl FdCanTransceiver {
+    /// Create the sole FDCAN1 driver from the typed board ownership token.
+    pub const fn from_token(_token: crate::board::Can1, bus_id: u8) -> Self {
+        Self::new(bus_id)
+    }
+
     /// Creates a new transceiver instance in `Closed` state.
     ///
     /// `bus_id` is the logical CAN bus index within the system (used by
@@ -337,12 +337,32 @@ impl FdCanTransceiver {
         // CanFrame::new() is const; repeat the initialiser inline to keep this
         // function const-compatible on stable Rust (array init from non-Copy
         // const default is stable since 1.59).
-        const EMPTY: CanFrame = CanFrame::new();
         Self {
             base: AbstractTransceiver::new(bus_id),
-            rx_queue: [EMPTY; RX_QUEUE_SIZE],
-            rx_head: 0,
-            rx_count: 0,
+            rx_queue: InterruptQueue::new(),
+            health: CanHealth::new(bsw_time::Duration::from_nanos(1_000_000_000)),
+        }
+    }
+
+    /// Service W1C error flags and exact bus-off restart timing using an
+    /// injected monotonic timestamp.
+    pub fn service_health(&mut self, now: bsw_time::Instant) {
+        const ERROR_FLAGS: u32 = (1 << 22) | (1 << 23) | (1 << 25) | (1 << 28);
+        // SAFETY: FDCAN1 is uniquely owned by this driver.
+        let raw = unsafe { reg_read(FDCAN1_BASE, FDCAN_IR_OFFSET) };
+        let flags = CanInterruptFlags::from_fdcan_ir(raw);
+        if raw & ERROR_FLAGS != 0 {
+            // SAFETY: IR is W1C; only observed error bits are acknowledged.
+            unsafe { reg_write(FDCAN1_BASE, FDCAN_IR_OFFSET, raw & ERROR_FLAGS) };
+        }
+        let state = self.health.handle(flags, now);
+        self.health.observe_queue_drops(self.rx_queue.dropped());
+        self.base.set_transceiver_state(state);
+        if self.health.poll_recovery(now) == Some(TransceiverState::Active) {
+            let _ = self.close();
+            let _ = self.init();
+            let _ = self.open();
+            self.base.set_transceiver_state(TransceiverState::Active);
         }
     }
 
@@ -355,13 +375,7 @@ impl FdCanTransceiver {
     /// Returns `None` if the buffer is empty.  Call this from the main loop
     /// or RTOS task after the ISR has deposited frames via `isr_rx_fifo0()`.
     pub fn receive(&mut self) -> Option<CanFrame> {
-        if self.rx_count == 0 {
-            return None;
-        }
-        let tail = (self.rx_head + RX_QUEUE_SIZE - self.rx_count) % RX_QUEUE_SIZE;
-        let frame = self.rx_queue[tail].clone();
-        self.rx_count -= 1;
-        Some(frame)
+        self.rx_queue.pop()
     }
 
     /// Drain the FDCAN1 RX FIFO 0 into the software ring-buffer.
@@ -423,13 +437,9 @@ impl FdCanTransceiver {
             self.base.statistics_mut().rx += 1;
 
             // Push to software ring-buffer if space is available.
-            if self.rx_count < RX_QUEUE_SIZE {
-                let can_id = CanId::id(raw_id, is_ext);
-                let frame = CanFrame::with_data(can_id, &data[..dlc_clamped]);
-                self.rx_queue[self.rx_head] = frame;
-                self.rx_head = (self.rx_head + 1) % RX_QUEUE_SIZE;
-                self.rx_count += 1;
-            } else {
+            let can_id = CanId::id(raw_id, is_ext);
+            let frame = CanFrame::with_data(can_id, &data[..dlc_clamped]);
+            if !self.rx_queue.push(frame) {
                 self.base.statistics_mut().rx_dropped += 1;
             }
         }
@@ -447,26 +457,21 @@ impl FdCanTransceiver {
     ///
     /// Sets CCCR.INIT=1 then CCCR.CCE=1 and waits for INIT to be
     /// acknowledged.  Classic-CAN only: clears FDOE and BRSE.
-    unsafe fn enter_init(&self) {
+    unsafe fn enter_init() {
         // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
         unsafe {
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_INIT);
             while (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) == 0 {}
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_CCE);
             // Classic CAN only — clear FD and bit-rate-switching bits.
-            reg_modify(
-                FDCAN1_BASE,
-                FDCAN_CCCR_OFFSET,
-                CCCR_FDOE | CCCR_BRSE,
-                0,
-            );
+            reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_FDOE | CCCR_BRSE, 0);
         }
     }
 
     /// Leave initialisation mode (INIT=0) to start normal operation.
     ///
     /// Waits until INIT is deasserted by the hardware.
-    unsafe fn leave_init(&self) {
+    unsafe fn leave_init() {
         // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
         unsafe {
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_INIT | CCCR_CCE, 0);
@@ -493,7 +498,7 @@ impl FdCanTransceiver {
     /// - **RXGFC** (0x080): global filter config.
     ///   ANFS[5:4] = 00 → accept all non-matching std-ID frames to FIFO 0.
     ///   ANFE[1:0] = 00 → accept all non-matching ext-ID frames to FIFO 0.
-    unsafe fn configure_message_ram(&self) {
+    unsafe fn configure_message_ram() {
         // SAFETY: all base addresses and offsets are valid for STM32G474.
         unsafe {
             // TX dedicated buffers: 3 elements, FIFO mode (TFQM=0).
@@ -513,11 +518,15 @@ impl FdCanTransceiver {
     /// Set up interrupts: enable RF0N (RX) and TC (TX complete) on line 0.
     ///
     /// Must be called while in init mode.
-    unsafe fn configure_interrupts(&self) {
+    unsafe fn configure_interrupts() {
         // SAFETY: FDCAN1_BASE offsets are valid for STM32G474.
         unsafe {
             // Enable RF0N and TC interrupt sources.
-            reg_write(FDCAN1_BASE, FDCAN_IE_OFFSET, IR_RF0N | IR_TC | IR_BO | IR_EP);
+            reg_write(
+                FDCAN1_BASE,
+                FDCAN_IE_OFFSET,
+                IR_RF0N | IR_TC | IR_BO | IR_EP,
+            );
             // Route all enabled interrupts to interrupt line 0.
             reg_write(FDCAN1_BASE, FDCAN_ILS_OFFSET, 0x0000_0000);
             // Enable interrupt line 0.
@@ -549,7 +558,7 @@ impl FdCanTransceiver {
     /// - T1: DLC[19:16], BRS=0, FDF=0, EFC=0
     /// - DB0: data bytes 3..0
     /// - DB1: data bytes 7..4
-    unsafe fn write_tx_element(&self, slot: usize, frame: &CanFrame) {
+    unsafe fn write_tx_element(slot: usize, frame: &CanFrame) {
         let base_addr = txbuf_elem_addr(slot);
         let raw_id = frame.id().raw_id();
 
@@ -563,7 +572,7 @@ impl FdCanTransceiver {
         };
 
         // T1: DLC in bits [19:16]; FD-related bits all 0.
-        let dlc = frame.payload_length() as u32;
+        let dlc = u32::from(frame.payload_length());
         let t1 = dlc << 16;
 
         // Data words — pack up to 8 bytes, little-endian.
@@ -605,7 +614,7 @@ impl CanTransceiver for FdCanTransceiver {
         // valid on STM32G474RE.
         unsafe {
             // Enter configuration mode.
-            self.enter_init();
+            Self::enter_init();
 
             // Bit timing for 500 kbit/s.
             reg_write(FDCAN1_BASE, FDCAN_NBTP_OFFSET, NBTP_500KBPS);
@@ -618,10 +627,10 @@ impl CanTransceiver for FdCanTransceiver {
             }
 
             // Message RAM layout and accept-all filter.
-            self.configure_message_ram();
+            Self::configure_message_ram();
 
             // Interrupt routing (RF0N + TC on line 0).
-            self.configure_interrupts();
+            Self::configure_interrupts();
         }
 
         self.base.transition_to_initialized()
@@ -631,7 +640,7 @@ impl CanTransceiver for FdCanTransceiver {
     fn shutdown(&mut self) {
         // SAFETY: FDCAN1_BASE + CCCR offset is valid.
         unsafe {
-            self.enter_init();
+            Self::enter_init();
         }
         self.base.transition_to_closed();
     }
@@ -647,7 +656,7 @@ impl CanTransceiver for FdCanTransceiver {
         unsafe {
             // Clear MON to enable TX acknowledge (normal operation).
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_MON, 0);
-            self.leave_init();
+            Self::leave_init();
         }
         self.base.transition_to_open()
     }
@@ -665,7 +674,7 @@ impl CanTransceiver for FdCanTransceiver {
     /// Close the bus (re-enter init mode, logical state → Closed).
     fn close(&mut self) -> ErrorCode {
         // SAFETY: FDCAN1 CCCR register is valid.
-        unsafe { self.enter_init() };
+        unsafe { Self::enter_init() };
         self.base.transition_to_closed()
     }
 
@@ -677,9 +686,9 @@ impl CanTransceiver for FdCanTransceiver {
         // SAFETY: FDCAN1 registers valid.
         unsafe {
             // Re-enter init to change CCCR.MON, then leave init.
-            self.enter_init();
+            Self::enter_init();
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_MON);
-            self.leave_init();
+            Self::leave_init();
         }
         self.base.transition_to_muted()
     }
@@ -691,9 +700,9 @@ impl CanTransceiver for FdCanTransceiver {
         }
         // SAFETY: FDCAN1 registers valid.
         unsafe {
-            self.enter_init();
+            Self::enter_init();
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_MON, 0);
-            self.leave_init();
+            Self::leave_init();
         }
         self.base.transition_to_open()
     }
@@ -741,7 +750,7 @@ impl CanTransceiver for FdCanTransceiver {
         }
 
         // SAFETY: put_idx < TX_BUF_COUNT; message RAM addresses are valid.
-        unsafe { self.write_tx_element(put_idx, frame) };
+        unsafe { Self::write_tx_element(put_idx, frame) };
 
         // Request transmission of the buffer we just filled.
         // SAFETY: TXBAR write is valid FDCAN1 register access.
@@ -787,8 +796,7 @@ impl FdCanTransceiver {
     }
 }
 
-// Implement CanReceiver for DiagCanTransport integration.
-impl crate::diag_can::CanReceiver for FdCanTransceiver {
+impl bsw_can::listener::FrameSource for FdCanTransceiver {
     fn receive(&mut self) -> Option<bsw_can::frame::CanFrame> {
         self.receive()
     }

@@ -7,7 +7,8 @@
 //! ## Design
 //!
 //! - `no_std` compatible — uses only `core`, no heap allocations.
-//! - All protocol logic is pure (no I/O, no timers, no callbacks).
+//! - Protocol timing is driven by caller-injected monotonic instants.
+//! - The core performs no I/O; host adapters connect it to virtual CAN.
 //! - State machines return transition structs describing required side-effects.
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -17,7 +18,10 @@ pub mod codec;
 pub mod constants;
 pub mod parameters;
 pub mod rx_handler;
+pub mod transport;
 pub mod tx_handler;
+#[cfg(feature = "std")]
+pub mod virtual_transport;
 
 pub use addressing::{ConnectionInfo, DataLinkAddressPair, TransportAddressPair};
 pub use codec::{

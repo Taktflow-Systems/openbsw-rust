@@ -129,10 +129,16 @@ impl<const N: usize, const T: usize, const POOL_SIZE: usize> BuddyAllocator<N, T
     /// - `POOL_SIZE % N == 0`
     const CHECK: () = {
         assert!(N > 0, "BuddyAllocator: N must be > 0");
-        assert!(N.is_power_of_two(), "BuddyAllocator: N must be a power of 2");
+        assert!(
+            N.is_power_of_two(),
+            "BuddyAllocator: N must be a power of 2"
+        );
         assert!(T == 2 * N - 1, "BuddyAllocator: T must equal 2*N - 1");
         assert!(POOL_SIZE >= N, "BuddyAllocator: POOL_SIZE must be >= N");
-        assert!(POOL_SIZE.is_multiple_of(N), "BuddyAllocator: POOL_SIZE must be divisible by N");
+        assert!(
+            POOL_SIZE.is_multiple_of(N),
+            "BuddyAllocator: POOL_SIZE must be divisible by N"
+        );
     };
 
     // -----------------------------------------------------------------------
@@ -322,8 +328,7 @@ impl<const N: usize, const T: usize, const POOL_SIZE: usize> BuddyAllocator<N, T
                 if let Some(off) = self.find_and_allocate(left, half, block_offset, target) {
                     return Some(off);
                 }
-                if let Some(off) =
-                    self.find_and_allocate(right, half, block_offset + half, target)
+                if let Some(off) = self.find_and_allocate(right, half, block_offset + half, target)
                 {
                     return Some(off);
                 }
@@ -401,7 +406,8 @@ impl<const N: usize, const T: usize, const POOL_SIZE: usize> BuddyAllocator<N, T
                 let half = block_size / 2;
                 let left = 2 * node + 1;
                 let right = 2 * node + 2;
-                self.largest_free(left, half).max(self.largest_free(right, half))
+                self.largest_free(left, half)
+                    .max(self.largest_free(right, half))
             }
         }
     }
@@ -546,7 +552,11 @@ mod tests {
         assert_eq!(alloc.largest_available(), 32);
 
         alloc.release_by_offset(off1);
-        assert_eq!(alloc.largest_available(), 64, "buddies must coalesce to full 64 B");
+        assert_eq!(
+            alloc.largest_available(),
+            64,
+            "buddies must coalesce to full 64 B"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -679,7 +689,9 @@ mod tests {
     fn allocate_release_allocate_no_corruption() {
         let mut alloc = Alloc8::new();
         let b = alloc.acquire(8).unwrap();
-        b.iter_mut().enumerate().for_each(|(i, byte)| *byte = i as u8);
+        b.iter_mut()
+            .enumerate()
+            .for_each(|(i, byte)| *byte = i as u8);
         let ptr = b.as_ptr();
         let _ = b;
         let offset = alloc.block_offset(ptr);

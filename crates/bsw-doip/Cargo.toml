@@ -1,17 +1,24 @@
 [package]
 name = "bsw-doip"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "DoIP (ISO 13400) diagnostics over IP — Rust port of OpenBSW doip"
 
 [features]
 default = ["std"]
-std = []
+std = ["bsw-ethernet/std", "bsw-lifecycle/std", "bsw-time/std"]
 
 [dependencies]
 bsw-ethernet = { path = "../bsw-ethernet", default-features = false }
+bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
 bsw-transport = { path = "../bsw-transport", default-features = false }
+
+[dev-dependencies]
+bsw-uds = { path = "../bsw-uds" }
 
 [lints]
 workspace = true

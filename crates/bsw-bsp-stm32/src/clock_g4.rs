@@ -152,7 +152,7 @@ const FLASH_ACR_DBG_SWEN: u32 = 1 << 18;
 #[inline(always)]
 unsafe fn reg_read(base: usize, offset: usize) -> u32 {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::read_volatile((base + offset) as *const u32) }
+    unsafe { crate::mmio::read((base + offset) as *const u32) }
 }
 
 /// Write a 32-bit peripheral register at `base + offset`.
@@ -163,7 +163,7 @@ unsafe fn reg_read(base: usize, offset: usize) -> u32 {
 #[inline(always)]
 unsafe fn reg_write(base: usize, offset: usize, val: u32) {
     // SAFETY: caller guarantees valid MMIO address.
-    unsafe { core::ptr::write_volatile((base + offset) as *mut u32, val) }
+    unsafe { crate::mmio::write((base + offset) as *mut u32, val) }
 }
 
 /// Read-modify-write: clear `mask` bits then OR in `bits`.
@@ -305,11 +305,7 @@ pub fn configure_clocks_g474() -> u32 {
         reg_write(
             FLASH_BASE,
             FLASH_ACR_OFFSET,
-            FLASH_ACR_LATENCY_4WS
-                | FLASH_ACR_PRFTEN
-                | FLASH_ACR_ICEN
-                | FLASH_ACR_DCEN
-                | dbg_swen,
+            FLASH_ACR_LATENCY_4WS | FLASH_ACR_PRFTEN | FLASH_ACR_ICEN | FLASH_ACR_DCEN | dbg_swen,
         );
         // Read-back to confirm the latency write was accepted.
         while (reg_read(FLASH_BASE, FLASH_ACR_OFFSET) & FLASH_ACR_LATENCY_MASK)

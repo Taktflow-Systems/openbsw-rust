@@ -1,0 +1,21 @@
+[package]
+name = "openbsw-resource-probe"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+bsw-can = { path = "../../crates/bsw-can" }
+bsw-bsp-stm32 = { path = "../../crates/bsw-bsp-stm32" }
+bsw-console = { path = "../../crates/bsw-console" }
+bsw-docan = { path = "../../crates/bsw-docan" }
+bsw-doip = { path = "../../crates/bsw-doip" }
+bsw-estd = { path = "../../crates/bsw-estd" }
+bsw-io = { path = "../../crates/bsw-io" }
+bsw-logger = { path = "../../crates/bsw-logger" }
+bsw-middleware = { path = "../../crates/bsw-middleware" }
+bsw-time = { path = "../../crates/bsw-time" }
+bsw-transport = { path = "../../crates/bsw-transport" }
+bsw-uds = { path = "../../crates/bsw-uds" }
+bsw-util = { path = "../../crates/bsw-util" }

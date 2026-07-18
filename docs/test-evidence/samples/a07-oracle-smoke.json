@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "evidence_id": "a07-oracle-protocol-smoke",
+  "package_ids": ["A07", "A09"],
+  "started_at": "2026-07-17T00:00:00Z",
+  "source": {
+    "rust_revision": "working-tree",
+    "openbsw_revision": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "environment": {
+    "os": "windows-with-ubuntu-24.04-wsl",
+    "rust": "1.94.0",
+    "python": "3.14.3"
+  },
+  "commands": [
+    "python tools/port/compare_oracle.py docs/port/oracle-fixtures/can-frame-openbsw.json docs/port/oracle-fixtures/can-frame-rust.json"
+  ],
+  "results": {"outcome": "passed", "passed": 1, "failed": 0, "skipped": 0, "errors": 0},
+  "artifacts": []
+}

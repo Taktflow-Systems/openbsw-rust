@@ -49,6 +49,11 @@ pub struct PolledUart {
 unsafe impl Send for PolledUart {}
 
 impl PolledUart {
+    /// Create USART3 from the typed board ownership token.
+    pub const fn from_token(_token: crate::board::Uart) -> Self {
+        Self::new()
+    }
+
     /// Create a new `PolledUart` pointing at USART3.
     pub const fn new() -> Self {
         Self {
@@ -104,8 +109,8 @@ impl PolledUart {
         // PD8 is pin 8, PD9 is pin 9 → both in AFRH (pins 8-15)
         gpiod.afrh().modify(|r, w| unsafe {
             let val = r.bits();
-            let val = (val & !(0xF << 0)) | (7 << 0);   // PD8 → AF7
-            let val = (val & !(0xF << 4)) | (7 << 4);    // PD9 → AF7
+            let val = (val & !0xF) | 7; // PD8 → AF7
+            let val = (val & !(0xF << 4)) | (7 << 4); // PD9 → AF7
             w.bits(val)
         });
 
@@ -116,7 +121,9 @@ impl PolledUart {
             .write(|w| unsafe { w.bits(BRR_115200_APB1_48MHZ) });
         usart.cr2().write(|w| unsafe { w.bits(0) });
         usart.cr3().write(|w| unsafe { w.bits(0) });
-        usart.cr1().write(|w| w.ue().enabled().te().enabled().re().enabled());
+        usart
+            .cr1()
+            .write(|w| w.ue().enabled().te().enabled().re().enabled());
     }
 
     /// Transmit a single byte, blocking until TXE or timeout.
@@ -133,6 +140,25 @@ impl PolledUart {
         true
     }
 
+    /// Attempt one byte without waiting for the peripheral.
+    pub fn try_write_byte(&mut self, byte: u8) -> bool {
+        let usart = unsafe { &*self.usart };
+        if usart.sr().read().txe().bit_is_clear() {
+            return false;
+        }
+        usart.dr().write(|w| w.dr().set(u16::from(byte)));
+        true
+    }
+
+    /// Read one byte only when RXNE is already asserted.
+    pub fn try_read_byte(&mut self) -> Option<u8> {
+        let usart = unsafe { &*self.usart };
+        if usart.sr().read().rxne().bit_is_clear() {
+            return None;
+        }
+        Some(usart.dr().read().dr().bits() as u8)
+    }
+
     /// Transmit a slice of bytes.
     pub fn write_bytes(&mut self, data: &[u8]) {
         for &byte in data {
@@ -147,10 +173,7 @@ impl PolledUart {
         let usart = unsafe { &*self.usart };
         let mut timeout = WRITE_TIMEOUT;
         while usart.sr().read().rxne().bit_is_clear() {
-            timeout = match timeout.checked_sub(1) {
-                Some(t) => t,
-                None => return None,
-            };
+            timeout = timeout.checked_sub(1)?;
         }
         #[allow(clippy::cast_possible_truncation)]
         Some(usart.dr().read().dr().bits() as u8)
@@ -161,5 +184,25 @@ impl core::fmt::Write for PolledUart {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.write_bytes(s.as_bytes());
         Ok(())
+    }
+}
+
+impl bsw_console::chario::CharOutput for PolledUart {
+    fn try_write(&mut self, byte: u8) -> Result<(), bsw_console::chario::CharOutError> {
+        self.try_write_byte(byte)
+            .then_some(())
+            .ok_or(bsw_console::chario::CharOutError::Busy)
+    }
+}
+
+impl bsw_console::chario::CharInput for PolledUart {
+    fn try_read(&mut self) -> Option<u8> {
+        self.try_read_byte()
+    }
+}
+
+impl Default for PolledUart {
+    fn default() -> Self {
+        Self::new()
     }
 }

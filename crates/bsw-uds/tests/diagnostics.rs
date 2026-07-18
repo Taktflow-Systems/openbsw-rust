@@ -16,8 +16,7 @@ use bsw_uds::nrc::Nrc;
 use bsw_uds::service_id::ServiceId;
 use bsw_uds::services::{
     ClearDiagnosticInformation, ControlDtcSetting, DiagnosticSessionControl, EcuReset,
-    ReadDtcInformation, RoutineControl, SecurityAccess, TesterPresent,
-    WriteDataByIdentifier,
+    ReadDtcInformation, RoutineControl, SecurityAccess, TesterPresent, WriteDataByIdentifier,
 };
 use bsw_uds::session::{DiagSession, SessionMask};
 
@@ -47,7 +46,10 @@ mod session_management {
     #[test]
     fn invalid_session_bytes() {
         for byte in [0x00, 0x04, 0x05, 0x10, 0xFF] {
-            assert!(DiagSession::from_byte(byte).is_none(), "Byte 0x{byte:02X} should be invalid");
+            assert!(
+                DiagSession::from_byte(byte).is_none(),
+                "Byte 0x{byte:02X} should be invalid"
+            );
         }
     }
 
@@ -55,11 +57,19 @@ mod session_management {
     #[test]
     fn session_mask_access_matrix() {
         // ALL allows everything
-        for session in [DiagSession::Default, DiagSession::Programming, DiagSession::Extended] {
+        for session in [
+            DiagSession::Default,
+            DiagSession::Programming,
+            DiagSession::Extended,
+        ] {
             assert!(SessionMask::ALL.contains(session));
         }
         // NONE allows nothing
-        for session in [DiagSession::Default, DiagSession::Programming, DiagSession::Extended] {
+        for session in [
+            DiagSession::Default,
+            DiagSession::Programming,
+            DiagSession::Extended,
+        ] {
             assert!(!SessionMask::NONE.contains(session));
         }
         // DEFAULT only
@@ -79,16 +89,28 @@ mod session_management {
     /// Session to_mask produces single-bit masks.
     #[test]
     fn session_to_mask_single_bit() {
-        for session in [DiagSession::Default, DiagSession::Programming, DiagSession::Extended] {
+        for session in [
+            DiagSession::Default,
+            DiagSession::Programming,
+            DiagSession::Extended,
+        ] {
             let mask = session.to_mask();
             assert!(mask.contains(session));
             // Count of other sessions NOT contained
-            let others: Vec<_> = [DiagSession::Default, DiagSession::Programming, DiagSession::Extended]
-                .iter()
-                .filter(|&&s| s != session)
-                .filter(|&&s| mask.contains(s))
-                .collect();
-            assert!(others.is_empty(), "Mask for {:?} should not contain other sessions", session);
+            let others: Vec<_> = [
+                DiagSession::Default,
+                DiagSession::Programming,
+                DiagSession::Extended,
+            ]
+            .iter()
+            .filter(|&&s| s != session)
+            .filter(|&&s| mask.contains(s))
+            .collect();
+            assert!(
+                others.is_empty(),
+                "Mask for {:?} should not contain other sessions",
+                session
+            );
         }
     }
 
@@ -120,9 +142,15 @@ mod routing {
     /// Router with multiple services dispatches to the correct one.
     #[test]
     fn router_dispatches_to_correct_service() {
-        let tp = TesterPresent { session_mask: SessionMask::ALL };
-        let ecu_rst = EcuReset { session_mask: SessionMask::ALL };
-        let dsc = DiagnosticSessionControl { current_session: DiagSession::Default };
+        let tp = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
+        let ecu_rst = EcuReset {
+            session_mask: SessionMask::ALL,
+        };
+        let dsc = DiagnosticSessionControl {
+            current_session: DiagSession::Default,
+        };
 
         let jobs: &[&dyn DiagJob] = &[&tp, &ecu_rst, &dsc];
         let router = DiagRouter::new(jobs);
@@ -147,7 +175,9 @@ mod routing {
     /// Unregistered service returns ServiceNotSupported.
     #[test]
     fn unregistered_service_nrc() {
-        let tp = TesterPresent { session_mask: SessionMask::ALL };
+        let tp = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
         let jobs: &[&dyn DiagJob] = &[&tp];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -159,7 +189,9 @@ mod routing {
     /// Service restricted to EXTENDED rejects DEFAULT session.
     #[test]
     fn session_restriction_enforced_by_router() {
-        let dtc = ControlDtcSetting { session_mask: SessionMask::EXTENDED };
+        let dtc = ControlDtcSetting {
+            session_mask: SessionMask::EXTENDED,
+        };
         let jobs: &[&dyn DiagJob] = &[&dtc];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -194,7 +226,9 @@ mod services {
 
     #[test]
     fn tester_present_positive_response() {
-        let svc = TesterPresent { session_mask: SessionMask::ALL };
+        let svc = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x3E, 0x00], &mut buf);
         assert_eq!(r, Ok(2));
@@ -204,7 +238,9 @@ mod services {
 
     #[test]
     fn tester_present_suppress_positive_bit() {
-        let svc = TesterPresent { session_mask: SessionMask::ALL };
+        let svc = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         // 0x80 = suppress-positive-response bit
         let r = svc.process(&[0x3E, 0x80], &mut buf);
@@ -213,7 +249,9 @@ mod services {
 
     #[test]
     fn tester_present_invalid_subfunction() {
-        let svc = TesterPresent { session_mask: SessionMask::ALL };
+        let svc = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x3E, 0x01], &mut buf);
         assert_eq!(r, Err(Nrc::SubFunctionNotSupported));
@@ -221,7 +259,9 @@ mod services {
 
     #[test]
     fn tester_present_too_short() {
-        let svc = TesterPresent { session_mask: SessionMask::ALL };
+        let svc = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x3E], &mut buf);
         assert_eq!(r, Err(Nrc::IncorrectMessageLengthOrInvalidFormat));
@@ -231,7 +271,9 @@ mod services {
 
     #[test]
     fn ecu_reset_all_types() {
-        let svc = EcuReset { session_mask: SessionMask::ALL };
+        let svc = EcuReset {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
 
         for sub_fn in [0x01, 0x02, 0x03] {
@@ -244,7 +286,9 @@ mod services {
 
     #[test]
     fn ecu_reset_invalid_type() {
-        let svc = EcuReset { session_mask: SessionMask::ALL };
+        let svc = EcuReset {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x11, 0x04], &mut buf);
         assert_eq!(r, Err(Nrc::SubFunctionNotSupported));
@@ -254,7 +298,9 @@ mod services {
 
     #[test]
     fn session_control_all_sessions() {
-        let svc = DiagnosticSessionControl { current_session: DiagSession::Default };
+        let svc = DiagnosticSessionControl {
+            current_session: DiagSession::Default,
+        };
         let mut buf = [0u8; 8];
 
         for sub_fn in [0x01, 0x02, 0x03] {
@@ -267,18 +313,22 @@ mod services {
 
     #[test]
     fn session_control_timing_parameters() {
-        let svc = DiagnosticSessionControl { current_session: DiagSession::Default };
+        let svc = DiagnosticSessionControl {
+            current_session: DiagSession::Default,
+        };
         let mut buf = [0u8; 8];
         svc.process(&[0x10, 0x01], &mut buf).unwrap();
         let p2 = u16::from_be_bytes([buf[2], buf[3]]);
         let p2_star = u16::from_be_bytes([buf[4], buf[5]]);
-        assert_eq!(p2, 50);     // P2 = 50 ms
+        assert_eq!(p2, 50); // P2 = 50 ms
         assert_eq!(p2_star, 500); // P2* = 500 × 10ms = 5000 ms
     }
 
     #[test]
     fn session_control_invalid_session_id() {
-        let svc = DiagnosticSessionControl { current_session: DiagSession::Default };
+        let svc = DiagnosticSessionControl {
+            current_session: DiagSession::Default,
+        };
         let mut buf = [0u8; 8];
         for bad in [0x00, 0x04, 0xFF] {
             let r = svc.process(&[0x10, bad], &mut buf);
@@ -290,7 +340,9 @@ mod services {
 
     #[test]
     fn dtc_setting_on_and_off() {
-        let svc = ControlDtcSetting { session_mask: SessionMask::EXTENDED };
+        let svc = ControlDtcSetting {
+            session_mask: SessionMask::EXTENDED,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x85, 0x01], &mut buf);
         assert_eq!(r, Ok(2));
@@ -306,7 +358,9 @@ mod services {
 
     #[test]
     fn read_dtc_report_by_status_mask() {
-        let svc = ReadDtcInformation { session_mask: SessionMask::ALL };
+        let svc = ReadDtcInformation {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x19, 0x02, 0xFF], &mut buf);
         assert_eq!(r, Ok(3));
@@ -317,7 +371,9 @@ mod services {
 
     #[test]
     fn read_dtc_report_supported() {
-        let svc = ReadDtcInformation { session_mask: SessionMask::ALL };
+        let svc = ReadDtcInformation {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x19, 0x0A], &mut buf);
         assert_eq!(r, Ok(3));
@@ -329,7 +385,9 @@ mod services {
 
     #[test]
     fn clear_dtc_all_group() {
-        let svc = ClearDiagnosticInformation { session_mask: SessionMask::ALL };
+        let svc = ClearDiagnosticInformation {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x14, 0xFF, 0xFF, 0xFF], &mut buf);
         assert_eq!(r, Ok(1));
@@ -338,7 +396,9 @@ mod services {
 
     #[test]
     fn clear_dtc_too_short() {
-        let svc = ClearDiagnosticInformation { session_mask: SessionMask::ALL };
+        let svc = ClearDiagnosticInformation {
+            session_mask: SessionMask::ALL,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x14, 0xFF, 0xFF], &mut buf);
         assert_eq!(r, Err(Nrc::IncorrectMessageLengthOrInvalidFormat));
@@ -347,29 +407,23 @@ mod services {
     // --- RoutineControl ---
 
     #[test]
-    fn routine_control_all_routines() {
-        let svc = RoutineControl { session_mask: SessionMask::EXTENDED };
+    fn legacy_routine_root_has_no_hardcoded_routines() {
+        let svc = RoutineControl {
+            session_mask: SessionMask::EXTENDED,
+        };
         let mut buf = [0u8; 8];
 
-        // LED blink
-        let r = svc.process(&[0x31, 0x01, 0xFF, 0x00], &mut buf);
-        assert_eq!(r, Ok(5));
-        assert_eq!(buf[0], 0x71);
-        assert_eq!(buf[4], 0x01); // started
-
-        // CAN self-test
-        let r = svc.process(&[0x31, 0x01, 0xFF, 0x01], &mut buf);
-        assert_eq!(r, Ok(5));
-        assert_eq!(buf[4], 0x00); // pass
-
-        // Read uptime
-        let r = svc.process(&[0x31, 0x01, 0xFF, 0x02], &mut buf);
-        assert_eq!(r, Ok(8));
+        for routine in [0x00, 0x01, 0x02] {
+            let r = svc.process(&[0x31, 0x01, 0xFF, routine], &mut buf);
+            assert_eq!(r, Err(Nrc::RequestOutOfRange));
+        }
     }
 
     #[test]
     fn routine_control_unknown_routine() {
-        let svc = RoutineControl { session_mask: SessionMask::EXTENDED };
+        let svc = RoutineControl {
+            session_mask: SessionMask::EXTENDED,
+        };
         let mut buf = [0u8; 8];
         let r = svc.process(&[0x31, 0x01, 0x00, 0x00], &mut buf);
         assert_eq!(r, Err(Nrc::RequestOutOfRange));
@@ -524,7 +578,8 @@ mod security_access {
         svc.process(&[0x27, 0x01], &mut buf).unwrap();
         let seed = (u32::from(buf[2]) << 8) | u32::from(buf[3]);
         let key = (seed ^ 0xDEAD_BEEF) as u16;
-        svc.process(&[0x27, 0x02, (key >> 8) as u8, key as u8], &mut buf).unwrap();
+        svc.process(&[0x27, 0x02, (key >> 8) as u8, key as u8], &mut buf)
+            .unwrap();
 
         // Request seed again
         svc.process(&[0x27, 0x01], &mut buf).unwrap();
@@ -539,7 +594,11 @@ mod security_access {
         let mut buf = [0u8; 8];
         for bad_sub in [0x00, 0x03, 0x04, 0x7F] {
             let r = svc.process(&[0x27, bad_sub], &mut buf);
-            assert_eq!(r, Err(Nrc::SubFunctionNotSupported), "Sub-fn 0x{bad_sub:02X}");
+            assert_eq!(
+                r,
+                Err(Nrc::SubFunctionNotSupported),
+                "Sub-fn 0x{bad_sub:02X}"
+            );
         }
     }
 }
@@ -595,11 +654,19 @@ mod service_id_and_nrc {
     #[test]
     fn nrc_roundtrip_all_defined() {
         let all_nrcs = [
-            Nrc::GeneralReject, Nrc::ServiceNotSupported, Nrc::SubFunctionNotSupported,
-            Nrc::IncorrectMessageLengthOrInvalidFormat, Nrc::ResponseTooLong,
-            Nrc::BusyRepeatRequest, Nrc::ConditionsNotCorrect, Nrc::RequestSequenceError,
-            Nrc::RequestOutOfRange, Nrc::SecurityAccessDenied, Nrc::InvalidKey,
-            Nrc::ExceededNumberOfAttempts, Nrc::ServiceNotSupportedInActiveSession,
+            Nrc::GeneralReject,
+            Nrc::ServiceNotSupported,
+            Nrc::SubFunctionNotSupported,
+            Nrc::IncorrectMessageLengthOrInvalidFormat,
+            Nrc::ResponseTooLong,
+            Nrc::BusyRepeatRequest,
+            Nrc::ConditionsNotCorrect,
+            Nrc::RequestSequenceError,
+            Nrc::RequestOutOfRange,
+            Nrc::SecurityAccessDenied,
+            Nrc::InvalidKey,
+            Nrc::ExceededNumberOfAttempts,
+            Nrc::ServiceNotSupportedInActiveSession,
         ];
         for nrc in all_nrcs {
             assert_eq!(Nrc::from_byte(nrc.as_byte()), Some(nrc));
@@ -717,8 +784,8 @@ mod dem_tests {
     #[test]
     fn dem_get_by_status_mask() {
         let mut dem: DemManager<16> = DemManager::new();
-        dem.report_event(0xAA, true);   // confirmed, failed
-        dem.report_event(0xBB, false);  // no failure bits
+        dem.report_event(0xAA, true); // confirmed, failed
+        dem.report_event(0xBB, false); // no failure bits
 
         let confirmed: Vec<u32> = dem
             .get_by_status_mask(status_bits::CONFIRMED_DTC)
@@ -739,13 +806,27 @@ mod e2e_router {
     /// Build a router with all standard services and verify dispatch for each.
     #[test]
     fn full_service_stack_dispatch() {
-        let tp = TesterPresent { session_mask: SessionMask::ALL };
-        let ecu_rst = EcuReset { session_mask: SessionMask::ALL };
-        let dsc = DiagnosticSessionControl { current_session: DiagSession::Default };
-        let dtc_ctrl = ControlDtcSetting { session_mask: SessionMask::EXTENDED };
-        let read_dtc = ReadDtcInformation { session_mask: SessionMask::ALL };
-        let clear_dtc = ClearDiagnosticInformation { session_mask: SessionMask::ALL };
-        let routine = RoutineControl { session_mask: SessionMask::EXTENDED };
+        let tp = TesterPresent {
+            session_mask: SessionMask::ALL,
+        };
+        let ecu_rst = EcuReset {
+            session_mask: SessionMask::ALL,
+        };
+        let dsc = DiagnosticSessionControl {
+            current_session: DiagSession::Default,
+        };
+        let dtc_ctrl = ControlDtcSetting {
+            session_mask: SessionMask::EXTENDED,
+        };
+        let read_dtc = ReadDtcInformation {
+            session_mask: SessionMask::ALL,
+        };
+        let clear_dtc = ClearDiagnosticInformation {
+            session_mask: SessionMask::ALL,
+        };
+        let routine = RoutineControl {
+            session_mask: SessionMask::EXTENDED,
+        };
         let sec = SecurityAccess::new(SessionMask::EXTENDED, 3);
 
         let jobs: &[&dyn DiagJob] = &[
@@ -755,32 +836,49 @@ mod e2e_router {
         let mut buf = [0u8; 16];
 
         // TesterPresent
-        assert!(router.dispatch(&[0x3E, 0x00], DiagSession::Default, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x3E, 0x00], DiagSession::Default, &mut buf)
+            .is_ok());
         // EcuReset
-        assert!(router.dispatch(&[0x11, 0x01], DiagSession::Default, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x11, 0x01], DiagSession::Default, &mut buf)
+            .is_ok());
         // DiagSessionControl
-        assert!(router.dispatch(&[0x10, 0x01], DiagSession::Default, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x10, 0x01], DiagSession::Default, &mut buf)
+            .is_ok());
         // ControlDtcSetting — only in Extended
         assert_eq!(
             router.dispatch(&[0x85, 0x01], DiagSession::Default, &mut buf),
             Err(Nrc::ServiceNotSupportedInActiveSession)
         );
-        assert!(router.dispatch(&[0x85, 0x01], DiagSession::Extended, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x85, 0x01], DiagSession::Extended, &mut buf)
+            .is_ok());
         // ReadDtcInfo
-        assert!(router.dispatch(&[0x19, 0x0A], DiagSession::Default, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x19, 0x0A], DiagSession::Default, &mut buf)
+            .is_ok());
         // ClearDTC
-        assert!(router.dispatch(&[0x14, 0xFF, 0xFF, 0xFF], DiagSession::Default, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x14, 0xFF, 0xFF, 0xFF], DiagSession::Default, &mut buf)
+            .is_ok());
         // RoutineControl — only in Extended
         assert_eq!(
             router.dispatch(&[0x31, 0x01, 0xFF, 0x00], DiagSession::Default, &mut buf),
             Err(Nrc::ServiceNotSupportedInActiveSession)
         );
-        assert!(router.dispatch(&[0x31, 0x01, 0xFF, 0x00], DiagSession::Extended, &mut buf).is_ok());
+        assert_eq!(
+            router.dispatch(&[0x31, 0x01, 0xFF, 0x00], DiagSession::Extended, &mut buf),
+            Err(Nrc::RequestOutOfRange)
+        );
         // SecurityAccess — only in Extended
         assert_eq!(
             router.dispatch(&[0x27, 0x01], DiagSession::Default, &mut buf),
             Err(Nrc::ServiceNotSupportedInActiveSession)
         );
-        assert!(router.dispatch(&[0x27, 0x01], DiagSession::Extended, &mut buf).is_ok());
+        assert!(router
+            .dispatch(&[0x27, 0x01], DiagSession::Extended, &mut buf)
+            .is_ok());
     }
 }

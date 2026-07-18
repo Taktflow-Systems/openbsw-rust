@@ -90,7 +90,7 @@ impl<T, const N: usize> FixedVec<T, N> {
     unsafe fn ptr_at(&self, index: usize) -> *const T {
         // SAFETY: caller guarantees index < N; `data` has N slots, each
         // `MaybeUninit<T>` has the same layout as `T`.
-        self.data.as_ptr().add(index).cast::<T>()
+        unsafe { self.data.as_ptr().add(index).cast::<T>() }
     }
 
     /// Returns a raw mutable pointer to element at `index`.
@@ -100,7 +100,7 @@ impl<T, const N: usize> FixedVec<T, N> {
     #[inline]
     unsafe fn ptr_at_mut(&mut self, index: usize) -> *mut T {
         // SAFETY: same as `ptr_at`, but mutable.
-        self.data.as_mut_ptr().add(index).cast::<T>()
+        unsafe { self.data.as_mut_ptr().add(index).cast::<T>() }
     }
 
     // --- Slice views -------------------------------------------------------
@@ -173,11 +173,15 @@ impl<T, const N: usize> FixedVec<T, N> {
         // `ptr::copy` handles potentially overlapping source/destination
         // ranges correctly (it is equivalent to `memmove`).
         unsafe {
-            let src = self.ptr_at(index);
-            let dst = self.ptr_at_mut(index + 1);
+            // Derive both pointers from one mutable-provenance base. Creating
+            // the source through `&self` and the destination through
+            // `&mut self` would invalidate the source tag under Stacked Borrows.
+            let base = self.data.as_mut_ptr().cast::<T>();
+            let src = base.add(index);
+            let dst = base.add(index + 1);
             let count = self.len - index;
             ptr::copy(src, dst, count);
-            ptr::write(self.ptr_at_mut(index), value);
+            ptr::write(base.add(index), value);
         }
         self.len += 1;
         Ok(())
@@ -192,15 +196,18 @@ impl<T, const N: usize> FixedVec<T, N> {
         assert!(index < self.len, "FixedVec::remove: index out of bounds");
         // SAFETY: `index < self.len` ensures the slot is initialised.
         // We read the element to return it, then compact the tail.
-        let value = unsafe { ptr::read(self.ptr_at(index)) };
         // SAFETY: Elements `(index+1)..len` are shifted left by one.
-        // `ptr::copy` handles overlapping ranges (memmove semantics).
-        unsafe {
-            let src = self.ptr_at(index + 1);
-            let dst = self.ptr_at_mut(index);
+        // `ptr::copy` handles overlapping ranges (memmove semantics). All
+        // pointers share one mutable-provenance base.
+        let value = unsafe {
+            let base = self.data.as_mut_ptr().cast::<T>();
+            let value = ptr::read(base.add(index));
+            let src = base.add(index + 1);
+            let dst = base.add(index);
             let count = self.len - index - 1;
             ptr::copy(src, dst, count);
-        }
+            value
+        };
         self.len -= 1;
         value
     }
@@ -221,9 +228,10 @@ impl<T, const N: usize> FixedVec<T, N> {
         // then read the (now last) slot without dropping it (decrement len).
         unsafe {
             let last_index = self.len - 1;
-            ptr::swap(self.ptr_at_mut(index), self.ptr_at_mut(last_index));
+            let base = self.data.as_mut_ptr().cast::<T>();
+            ptr::swap(base.add(index), base.add(last_index));
             self.len -= 1;
-            ptr::read(self.ptr_at(self.len))
+            ptr::read(base.add(self.len))
         }
     }
 
@@ -299,20 +307,17 @@ impl<T, const N: usize> FixedVec<T, N> {
     pub fn retain(&mut self, mut f: impl FnMut(&T) -> bool) {
         let mut write_idx = 0usize;
         let mut read_idx = 0usize;
+        let base = self.data.as_mut_ptr().cast::<T>();
         while read_idx < self.len {
             // SAFETY: `read_idx < self.len` — slot is initialised.
-            let keep = unsafe { f(&*self.ptr_at(read_idx)) };
+            let keep = unsafe { f(&*base.add(read_idx)) };
             if keep {
                 if write_idx != read_idx {
                     // SAFETY: Both indices are within `0..self.len`.
                     // `ptr::copy_nonoverlapping` is safe because `write_idx <
                     // read_idx`, so the two slots do not overlap.
                     unsafe {
-                        ptr::copy_nonoverlapping(
-                            self.ptr_at(read_idx),
-                            self.ptr_at_mut(write_idx),
-                            1,
-                        );
+                        ptr::copy_nonoverlapping(base.add(read_idx), base.add(write_idx), 1);
                     }
                 }
                 write_idx += 1;
@@ -320,7 +325,7 @@ impl<T, const N: usize> FixedVec<T, N> {
                 // SAFETY: `read_idx < self.len` — slot is initialised; we
                 // drop it in place.
                 unsafe {
-                    ptr::drop_in_place(self.ptr_at_mut(read_idx));
+                    ptr::drop_in_place(base.add(read_idx));
                 }
             }
             read_idx += 1;
@@ -479,9 +484,7 @@ impl<T: Eq, const N: usize> Eq for FixedVec<T, N> {}
 // PartialOrd / Ord
 // ---------------------------------------------------------------------------
 
-impl<T: PartialOrd, const N: usize, const M: usize> PartialOrd<FixedVec<T, M>>
-    for FixedVec<T, N>
-{
+impl<T: PartialOrd, const N: usize, const M: usize> PartialOrd<FixedVec<T, M>> for FixedVec<T, N> {
     fn partial_cmp(&self, other: &FixedVec<T, M>) -> Option<core::cmp::Ordering> {
         self.as_slice().partial_cmp(other.as_slice())
     }

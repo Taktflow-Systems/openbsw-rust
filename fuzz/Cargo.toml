@@ -1,0 +1,112 @@
+[package]
+name = "openbsw-rust-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bsw-can = { path = "../crates/bsw-can" }
+bsw-com = { path = "../crates/bsw-com" }
+bsw-docan = { path = "../crates/bsw-docan" }
+bsw-doip = { path = "../crates/bsw-doip" }
+bsw-estd = { path = "../crates/bsw-estd" }
+bsw-io = { path = "../crates/bsw-io" }
+bsw-uds = { path = "../crates/bsw-uds" }
+bsw-time = { path = "../crates/bsw-time" }
+bsw-transport = { path = "../crates/bsw-transport" }
+
+[[bin]]
+name = "can_frame"
+path = "fuzz_targets/can_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "isotp_codec"
+path = "fuzz_targets/isotp_codec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uds_dispatch"
+path = "fuzz_targets/uds_dispatch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uds_connections"
+path = "fuzz_targets/uds_connections.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doip_header"
+path = "fuzz_targets/doip_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doip_payload"
+path = "fuzz_targets/doip_payload.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doip_tcp"
+path = "fuzz_targets/doip_tcp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doip_diagnostic"
+path = "fuzz_targets/doip_diagnostic.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "storage_record"
+path = "fuzz_targets/storage_record.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "com_packing"
+path = "fuzz_targets/com_packing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fixed_containers"
+path = "fuzz_targets/fixed_containers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "memory_queue"
+path = "fuzz_targets/memory_queue.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "docan_state"
+path = "fuzz_targets/docan_state.rs"
+test = false
+doc = false
+bench = false

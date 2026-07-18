@@ -1,15 +1,18 @@
 [package]
 name = "bsw-uds"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "UDS diagnostics (ISO 14229) service framework — Rust port of OpenBSW uds"
 
 [features]
 default = ["std"]
-std = []
+std = ["bsw-time/std"]
 
 [dependencies]
+bsw-time = { path = "../bsw-time", default-features = false }
 bsw-transport = { path = "../bsw-transport", default-features = false }
 
 [lints]

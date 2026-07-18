@@ -1,0 +1,9 @@
+{
+  "protocol_version": 1,
+  "scenario": "doip-alive-check",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "records": [
+    {"sequence": 0, "kind": "tcp", "source": "openbsw", "input": "capacity-arbitration", "output": "02fd000700000000", "state": "alive-check-pending"},
+    {"sequence": 1, "kind": "tcp", "source": "openbsw", "input": "02fd0008000000021234", "output": "none", "state": "active"}
+  ]
+}

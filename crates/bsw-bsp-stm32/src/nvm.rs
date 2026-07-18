@@ -57,9 +57,6 @@ use crate::flash_g4::{FlashG4, NVM_BASE_ADDR, NVM_PAGE_START};
 /// Page size (2 KB in dual-bank mode).
 const PAGE_SIZE: usize = crate::flash_g4::FLASH_PAGE_SIZE as usize;
 
-/// Absolute address of the block directory (page 252 in dual-bank).
-const DIR_ADDR: u32 = NVM_BASE_ADDR;
-
 /// Absolute address of the data page (page 253 in dual-bank).
 const DATA_ADDR: u32 = NVM_BASE_ADDR + PAGE_SIZE as u32;
 
@@ -68,24 +65,6 @@ const DIR_PAGE: u16 = NVM_PAGE_START;
 
 /// Flash page number of the data page (253 in dual-bank).
 const DATA_PAGE: u16 = NVM_PAGE_START + 1;
-
-// ---------------------------------------------------------------------------
-// Block directory constants
-// ---------------------------------------------------------------------------
-
-/// Magic word written at the start of the directory page to distinguish an
-/// initialised NvM area from an erased one.
-const DIR_MAGIC: u32 = 0x4E564D5F; // ASCII "NVM_"
-
-/// NvM layout version.  Increment whenever block offsets or slot sizes change.
-const DIR_VERSION: u32 = 1;
-
-/// Byte offset of the magic word in the directory page.
-const DIR_OFF_MAGIC: u32 = 0;
-/// Byte offset of the version field.
-const DIR_OFF_VERSION: u32 = 4;
-/// Byte offset of the per-block validity bitmap (one u32, bits 0–3 = blocks 0–3).
-const DIR_OFF_VALID_BITS: u32 = 8;
 
 // ---------------------------------------------------------------------------
 // Block descriptors
@@ -436,7 +415,12 @@ mod tests {
     fn slot_size_is_multiple_of_8() {
         for i in 0..BLOCK_COUNT {
             let sz = slot_size(BLOCK_MAX_LEN[i]);
-            assert_eq!(sz % 8, 0, "block {i} slot size {} is not 8-byte aligned", sz);
+            assert_eq!(
+                sz % 8,
+                0,
+                "block {i} slot size {} is not 8-byte aligned",
+                sz
+            );
         }
     }
 

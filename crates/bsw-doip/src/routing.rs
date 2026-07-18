@@ -3,7 +3,7 @@
 //! All multi-byte fields are big-endian (network byte order) as required by
 //! ISO 13400-2.
 
-use crate::constants::{EID_LENGTH, GID_LENGTH, RoutingActivationCode, VIN_LENGTH};
+use crate::constants::{RoutingActivationCode, EID_LENGTH, GID_LENGTH, VIN_LENGTH};
 
 // ---------------------------------------------------------------------------
 // ParseError
@@ -360,6 +360,8 @@ impl DiagnosticMessageHeader {
 
 #[cfg(test)]
 mod tests {
+    use std::{format, vec::Vec};
+
     use super::*;
     use crate::constants::{ActivationType, RoutingActivationCode};
 
@@ -382,7 +384,7 @@ mod tests {
     fn routing_activation_request_parse_with_oem() {
         let data: [u8; 11] = [
             0x0E, 0x01, // source = 0x0E01
-            0x00,       // Default activation
+            0x00, // Default activation
             0x00, 0x00, 0x00, 0x00, // reserved
             0xDE, 0xAD, 0xBE, 0xEF, // OEM
         ];
@@ -396,7 +398,10 @@ mod tests {
         let data: [u8; 3] = [0x0E, 0x00, 0x00];
         assert_eq!(
             RoutingActivationRequest::parse(&data),
-            Err(ParseError::TooShort { expected: 7, actual: 3 })
+            Err(ParseError::TooShort {
+                expected: 7,
+                actual: 3
+            })
         );
     }
 
@@ -440,7 +445,7 @@ mod tests {
         let data: [u8; 9] = [
             0x0E, 0x00, // tester address
             0xE0, 0x00, // entity address
-            0x10,       // Success
+            0x10, // Success
             0x00, 0x00, 0x00, 0x00, // reserved
         ];
         let resp = RoutingActivationResponse::parse(&data).unwrap();
@@ -453,10 +458,7 @@ mod tests {
     #[test]
     fn routing_activation_response_parse_with_oem() {
         let data: [u8; 13] = [
-            0x0E, 0x00, 0xE0, 0x00,
-            0x10,
-            0x00, 0x00, 0x00, 0x00,
-            0xCA, 0xFE, 0xBA, 0xBE,
+            0x0E, 0x00, 0xE0, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0xCA, 0xFE, 0xBA, 0xBE,
         ];
         let resp = RoutingActivationResponse::parse(&data).unwrap();
         assert_eq!(resp.oem_specific, Some([0xCA, 0xFE, 0xBA, 0xBE]));
@@ -526,7 +528,10 @@ mod tests {
         let short = [0u8; 10];
         assert_eq!(
             VehicleAnnouncement::parse(&short),
-            Err(ParseError::TooShort { expected: 32, actual: 10 })
+            Err(ParseError::TooShort {
+                expected: 32,
+                actual: 10
+            })
         );
     }
 
@@ -566,7 +571,10 @@ mod tests {
         let data = [0x0E, 0x00];
         assert_eq!(
             DiagnosticMessageHeader::parse(&data),
-            Err(ParseError::TooShort { expected: 4, actual: 2 })
+            Err(ParseError::TooShort {
+                expected: 4,
+                actual: 2
+            })
         );
     }
 
@@ -593,7 +601,10 @@ mod tests {
 
     #[test]
     fn too_short_error() {
-        let err = ParseError::TooShort { expected: 7, actual: 3 };
+        let err = ParseError::TooShort {
+            expected: 7,
+            actual: 3,
+        };
         match err {
             ParseError::TooShort { expected, actual } => {
                 assert_eq!(expected, 7);

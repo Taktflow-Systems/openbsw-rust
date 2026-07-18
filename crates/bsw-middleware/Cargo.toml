@@ -1,0 +1,20 @@
+[package]
+name = "bsw-middleware"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Heap-free service-oriented middleware contracts and checked Rust generator"
+
+[features]
+default = ["std"]
+std = []
+
+[[bin]]
+name = "bsw-middleware-codegen"
+path = "src/bin/codegen.rs"
+required-features = ["std"]
+
+[lints]
+workspace = true

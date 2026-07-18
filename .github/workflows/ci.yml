@@ -10,44 +10,159 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  format:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+      - run: cargo fmt --manifest-path fuzz/Cargo.toml -- --check
+      - run: cargo fmt --manifest-path tools/resource-probe/Cargo.toml -- --check
+
   test:
     name: Tests (host)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --exclude bsw-bsp-stm32
+      - run: cargo test --workspace --exclude bsw-bsp-stm32 --all-features
 
   check-f4:
     name: Cross-check STM32F4
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: thumbv7em-none-eabihf
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p bsw-bsp-stm32 --features stm32f413 --target thumbv7em-none-eabihf
+      - run: cargo check -p bsw-bsp-stm32 --no-default-features --features stm32f413 --target thumbv7em-none-eabihf
+        env:
+          RUSTFLAGS: -D warnings
+      - run: cargo check -p bsw-bsp-stm32 --examples --no-default-features --features stm32f413 --target thumbv7em-none-eabihf
+      - run: cargo clippy -p bsw-bsp-stm32 --lib --no-default-features --features stm32f413 --target thumbv7em-none-eabihf -- -D warnings
 
   check-g4:
     name: Cross-check STM32G4
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: thumbv7em-none-eabihf
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p bsw-bsp-stm32 --features stm32g474 --target thumbv7em-none-eabihf
+      - run: cargo check -p bsw-bsp-stm32 --no-default-features --features stm32g474 --target thumbv7em-none-eabihf
+        env:
+          RUSTFLAGS: -D warnings
+      - run: cargo check -p bsw-bsp-stm32 --examples --no-default-features --features stm32g474 --target thumbv7em-none-eabihf
+      - run: cargo clippy -p bsw-bsp-stm32 --lib --no-default-features --features stm32g474 --target thumbv7em-none-eabihf -- -D warnings
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --exclude bsw-bsp-stm32 -- -D warnings
+      - run: cargo clippy --workspace --exclude bsw-bsp-stm32 --all-targets --all-features -- -D warnings
+
+  feature-policy:
+    name: Feature and no_std policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      - run: python tools/port/check_features.py
+      - run: python tools/port/check_no_std.py
+
+  repository-policy:
+    name: Port manifest and evidence policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - run: pwsh ./tools/port/check_generated.ps1
+      - run: python tools/port/generate_status.py --check docs/port/status.md
+      - run: python tools/port/validate_evidence.py
+      - run: python tools/port/inventory_unsafe.py --check
+      - run: python tools/port/check_dependencies.py
+      - run: python tools/port/check_stm32_examples.py
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/can-frame-openbsw.json docs/port/oracle-fixtures/can-frame-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/docan-openbsw.json docs/port/oracle-fixtures/docan-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/uds-openbsw.json docs/port/oracle-fixtures/uds-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-routing-openbsw.json docs/port/oracle-fixtures/doip-routing-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-alive-openbsw.json docs/port/oracle-fixtures/doip-alive-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-diagnostic-openbsw.json docs/port/oracle-fixtures/doip-diagnostic-rust.json
+      - run: python tools/port/compare_oracle.py docs/port/oracle-fixtures/reference-app-openbsw.json docs/port/oracle-fixtures/reference-app-rust.json
+
+  reference-app:
+    name: POSIX reference application workflows and robustness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run -p openbsw-reference-app --all-features -- --workflows
+      - run: cargo test -p openbsw-reference-app --all-features f10_
+
+  socketcan:
+    name: SocketCAN virtual-CAN integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Provision vcan0
+        run: |
+          sudo modprobe vcan
+          sudo ip link add dev vcan0 type vcan
+          sudo ip link set vcan0 mtu 72
+          sudo ip link set vcan0 up
+      - run: cargo test -p bsw-can --features socketcan,can-fd -- --nocapture
+      - run: cargo test -p openbsw-reference-app --features socketcan f05_ -- --nocapture
+
+  miri:
+    name: Miri safety suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly-2026-03-14
+        with:
+          components: miri,rust-src
+      - run: cargo miri setup
+      - run: pwsh ./tools/port/check_miri.ps1
+
+  fuzz:
+    name: Fuzz smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly-2026-03-14
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: pwsh ./tools/port/check_fuzz.ps1 -Runs 100
+
+  resources:
+    name: Resource regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly-2026-03-14
+        with:
+          targets: thumbv7em-none-eabihf
+          components: llvm-tools-preview
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+      - run: pwsh ./tools/port/measure_resources.ps1 -Check

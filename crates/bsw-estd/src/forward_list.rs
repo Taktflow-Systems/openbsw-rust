@@ -73,8 +73,8 @@ enum LinkState<T> {
     /// Node is part of a list.
     ///
     /// - `None`       → this is the last node (C++ `_next == nullptr`)
-    /// - `Some(ptr)`  → pointer to the next [`Link`] in the list
-    InList(Option<NonNull<Link<T>>>),
+    /// - `Some(ptr)`  → pointer to the next node in the list
+    InList(Option<NonNull<T>>),
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -142,8 +142,9 @@ impl<T> Link<T> {
     /// Caller must ensure no concurrent mutation of this link's `next` field
     /// and that this link is currently in `InList` state (or is the sentinel).
     #[inline]
-    unsafe fn get_next(&self) -> Option<NonNull<Link<T>>> {
-        match &*self.next.get() {
+    unsafe fn get_next(&self) -> Option<NonNull<T>> {
+        // SAFETY: guaranteed by the caller's exclusive-access contract.
+        match unsafe { &*self.next.get() } {
             LinkState::Free => None,
             LinkState::InList(p) => *p,
         }
@@ -155,8 +156,9 @@ impl<T> Link<T> {
     /// Caller must ensure exclusive access to this link's `next` field and
     /// that `ptr` (if `Some`) points to a valid, live `Link<T>`.
     #[inline]
-    unsafe fn set_next(&self, ptr: Option<NonNull<Link<T>>>) {
-        *self.next.get() = LinkState::InList(ptr);
+    unsafe fn set_next(&self, ptr: Option<NonNull<T>>) {
+        // SAFETY: guaranteed by the caller's exclusive-access contract.
+        unsafe { *self.next.get() = LinkState::InList(ptr) };
     }
 
     /// Marks this link as free (not in any list).
@@ -166,7 +168,8 @@ impl<T> Link<T> {
     /// unlinked from every list before calling.
     #[inline]
     unsafe fn set_free(&self) {
-        *self.next.get() = LinkState::Free;
+        // SAFETY: guaranteed by the caller's exclusive-access contract.
+        unsafe { *self.next.get() = LinkState::Free };
     }
 }
 
@@ -188,32 +191,12 @@ impl<T> core::fmt::Debug for Link<T> {
 
 /// Trait implemented by types that embed a [`Link<Self>`] field.
 ///
-/// # Safety
-///
-/// Implementors **must** uphold **both** of the following invariants:
-///
-/// 1. `link()` returns a reference to a `Link<Self>` field at a **fixed,
-///    stable byte offset** within `Self`.  The offset must not change across
-///    calls or across the lifetime of any instance.
-/// 2. `from_link_ptr(ptr)` correctly computes the address of the containing
-///    `Self` instance given a pointer to that same `Link<Self>` field.
-///    Passing the wrong field name to [`impl_linked!`] causes undefined
-///    behaviour.
-///
-/// Use the [`impl_linked!`] macro which generates a correct implementation
-/// using `core::mem::offset_of!`.
-pub unsafe trait Linked: Sized {
+/// The list stores pointers to whole nodes, so implementations only expose the
+/// embedded link; no container-from-field pointer reconstruction is required.
+/// Use [`impl_linked!`] to generate the boilerplate implementation.
+pub trait Linked: Sized {
     /// Returns a shared reference to the embedded [`Link`] field.
     fn link(&self) -> &Link<Self>;
-
-    /// Converts a pointer to the [`Link`] field back to a pointer to `Self`.
-    ///
-    /// # Safety
-    ///
-    /// `ptr` must point to the `Link<Self>` field **inside a valid, live `Self`
-    /// instance**.  The pointer must be correctly aligned and the instance must
-    /// not have been dropped.
-    unsafe fn from_link_ptr(ptr: *const Link<Self>) -> *const Self;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -235,25 +218,14 @@ pub unsafe trait Linked: Sized {
 /// impl_linked!(MyNode, link);
 /// ```
 ///
-/// This expands to `unsafe impl Linked for MyNode` using
-/// `core::mem::offset_of!(MyNode, link)` (stable since Rust 1.77) to compute
-/// the container address from a link pointer.
+/// This expands to a safe [`Linked`] implementation returning the named field.
 #[macro_export]
 macro_rules! impl_linked {
     ($type:ty, $field:ident) => {
-        unsafe impl $crate::forward_list::Linked for $type {
+        impl $crate::forward_list::Linked for $type {
             #[inline]
             fn link(&self) -> &$crate::forward_list::Link<Self> {
                 &self.$field
-            }
-
-            #[inline]
-            unsafe fn from_link_ptr(ptr: *const $crate::forward_list::Link<Self>) -> *const Self {
-                // SAFETY: Caller guarantees `ptr` points to the `$field` member
-                // of a valid, live `$type` instance.  We subtract the known
-                // compile-time offset of that field to recover the container address.
-                let offset = core::mem::offset_of!($type, $field);
-                (ptr as *const u8).sub(offset) as *const Self
             }
         }
     };
@@ -284,12 +256,12 @@ macro_rules! impl_linked {
 /// | `reverse`    | O(n)       |
 /// | `clear`      | O(n)       |
 ///
-/// ## Drop behaviour
+/// ## Teardown
 ///
-/// Dropping a `ForwardList` marks all remaining nodes as [`LinkState::Free`]
-/// so they can safely be inserted into another list afterwards — mirroring the
-/// C++ destructor which calls `clear()`.
-pub struct ForwardList<T: Linked> {
+/// Call [`clear`](Self::clear) before discarding a non-empty list when its
+/// nodes will be reused. Rust drop order cannot safely dereference externally
+/// owned intrusive nodes from `Drop`, so teardown is explicit.
+pub struct ForwardList<'a, T: Linked> {
     /// Sentinel "before-first" link.  Its `next` field points to the first
     /// real node, or is `None` when the list is empty.  The sentinel is always
     /// in `InList` state — it is never `Free`.
@@ -299,12 +271,15 @@ pub struct ForwardList<T: Linked> {
     /// `InList(None)` on the first mutation.  All read helpers treat `Free`
     /// on the sentinel as equivalent to `InList(None)`.
     head: Link<T>,
+    /// Nodes borrowed by this list must outlive the list and remain at stable
+    /// addresses while linked.
+    _nodes: PhantomData<&'a T>,
     // ForwardList contains raw pointers — it is !Send and !Sync by default
     // because PhantomData<*mut T> opts out of both auto-traits.
     _not_send_sync: PhantomData<*mut T>,
 }
 
-impl<T: Linked> ForwardList<T> {
+impl<'a, T: Linked> ForwardList<'a, T> {
     /// Creates an empty list.
     ///
     /// This is a `const fn` and can be used to initialise `static` lists.
@@ -312,6 +287,7 @@ impl<T: Linked> ForwardList<T> {
     pub const fn new() -> Self {
         ForwardList {
             head: Link::new(),
+            _nodes: PhantomData,
             _not_send_sync: PhantomData,
         }
     }
@@ -331,8 +307,9 @@ impl<T: Linked> ForwardList<T> {
         // SAFETY: Exclusive access is guaranteed by the &mut ForwardList borrow
         // held by the caller.  Reading and writing through UnsafeCell is safe
         // when there is no concurrent access.
-        if matches!(&*self.head.next.get(), LinkState::Free) {
-            *self.head.next.get() = LinkState::InList(None);
+        if matches!(unsafe { &*self.head.next.get() }, LinkState::Free) {
+            // SAFETY: the caller holds exclusive access to the list.
+            unsafe { *self.head.next.get() = LinkState::InList(None) };
         }
     }
 
@@ -343,9 +320,9 @@ impl<T: Linked> ForwardList<T> {
     /// # Safety
     /// Caller must hold `&mut ForwardList` or ensure no concurrent mutation.
     #[inline]
-    unsafe fn head_next(&self) -> Option<NonNull<Link<T>>> {
+    unsafe fn head_next(&self) -> Option<NonNull<T>> {
         // SAFETY: see ensure_head_init.
-        match &*self.head.next.get() {
+        match unsafe { &*self.head.next.get() } {
             LinkState::Free => None,
             LinkState::InList(p) => *p,
         }
@@ -358,23 +335,9 @@ impl<T: Linked> ForwardList<T> {
     /// `Some`) must point to a valid, live `Link<T>` that is already in
     /// `InList` state.
     #[inline]
-    unsafe fn set_head_next(&self, ptr: Option<NonNull<Link<T>>>) {
+    unsafe fn set_head_next(&self, ptr: Option<NonNull<T>>) {
         // SAFETY: see ensure_head_init.
-        *self.head.next.get() = LinkState::InList(ptr);
-    }
-
-    /// Converts a `NonNull<Link<T>>` to `&'a T`.
-    ///
-    /// # Safety
-    /// `link_ptr` must point to the `Link<T>` field inside a valid, live `T`
-    /// whose lifetime extends for at least `'a`.
-    #[inline]
-    unsafe fn link_ptr_to_ref<'a>(link_ptr: NonNull<Link<T>>) -> &'a T {
-        // SAFETY: Caller guarantees link_ptr is inside a valid T.  We use the
-        // implementor-supplied from_link_ptr to recover the container address,
-        // then form a shared reference bound to 'a.
-        let node_ptr = T::from_link_ptr(link_ptr.as_ptr());
-        &*node_ptr
+        unsafe { *self.head.next.get() = LinkState::InList(ptr) };
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -399,10 +362,7 @@ impl<T: Linked> ForwardList<T> {
         // SAFETY: head_next reads the sentinel.  link_ptr_to_ref is safe
         // because nodes in the list are guaranteed live by the caller's
         // ownership contract (nodes must outlive the list).
-        unsafe {
-            self.head_next()
-                .map(|link_ptr| Self::link_ptr_to_ref(link_ptr))
-        }
+        unsafe { self.head_next().map(|node_ptr| node_ptr.as_ref()) }
     }
 
     /// Inserts `node` at the front of the list.
@@ -410,7 +370,7 @@ impl<T: Linked> ForwardList<T> {
     /// If `node` is already part of **any** list (`node.link().is_in_use()`
     /// returns `true`), this is a **no-op** — matching C++ behaviour where
     /// `estd::forward_list::push_front` guards with `!is_in_use(value)`.
-    pub fn push_front(&mut self, node: &T) {
+    pub fn push_front(&mut self, node: &'a T) {
         let link = node.link();
         if link.is_in_use() {
             // No-op: already in a list.  Matches C++ estd::forward_list::push_front.
@@ -424,8 +384,7 @@ impl<T: Linked> ForwardList<T> {
             self.ensure_head_init();
             let current_first = self.head_next();
             link.set_next(current_first);
-            let link_nn = NonNull::new_unchecked(link as *const Link<T> as *mut Link<T>);
-            self.set_head_next(Some(link_nn));
+            self.set_head_next(Some(NonNull::from(node)));
         }
     }
 
@@ -441,11 +400,11 @@ impl<T: Linked> ForwardList<T> {
         // node Free before returning a reference to it (the T is still live;
         // only the link state changes).
         unsafe {
-            let first_link_ptr = self.head_next()?;
-            let second = first_link_ptr.as_ref().get_next();
+            let first_node_ptr = self.head_next()?;
+            let second = first_node_ptr.as_ref().link().get_next();
             self.set_head_next(second);
-            first_link_ptr.as_ref().set_free();
-            Some(Self::link_ptr_to_ref(first_link_ptr))
+            first_node_ptr.as_ref().link().set_free();
+            Some(first_node_ptr.as_ref())
         }
     }
 
@@ -454,7 +413,7 @@ impl<T: Linked> ForwardList<T> {
     /// If `node` is not in this list the call is a **no-op** (no panic).
     /// The removed node's link is marked [`LinkState::Free`].
     pub fn remove(&mut self, node: &T) {
-        let target_link: *const Link<T> = node.link();
+        let target_node: *const T = node;
 
         // SAFETY: We hold &mut self — exclusive access.  We walk the list from
         // the sentinel using `prev` as a *const Link<T> (which we know is
@@ -468,22 +427,23 @@ impl<T: Linked> ForwardList<T> {
             // Start `prev` at the sentinel so removal of the first real node
             // needs no special case — the sentinel's next pointer is updated
             // exactly like any other predecessor's next pointer.
-            let mut prev: *const Link<T> = &self.head as *const Link<T>;
+            let mut prev: *const Link<T> = &self.head;
 
             loop {
                 let next_ptr = (*prev).get_next();
                 match next_ptr {
                     None => return, // Reached end of list; node not found.
                     Some(curr_nn) => {
-                        let curr: *const Link<T> = curr_nn.as_ptr();
-                        if curr == target_link {
+                        let curr = curr_nn.as_ptr();
+                        let curr_link = curr_nn.as_ref().link();
+                        if core::ptr::eq(curr, target_node.cast_mut()) {
                             // Found the target — splice it out.
-                            let after = (*curr).get_next();
+                            let after = curr_link.get_next();
                             (*prev).set_next(after);
-                            (*curr).set_free();
+                            curr_link.set_free();
                             return;
                         }
-                        prev = curr;
+                        prev = curr_link;
                     }
                 }
             }
@@ -499,16 +459,16 @@ impl<T: Linked> ForwardList<T> {
         if !link.is_in_use() {
             return false;
         }
-        let target: *const Link<T> = link;
+        let target: *const T = node;
         // SAFETY: Read-only walk; nodes are live by the caller's ownership
         // contract.  get_next reads through UnsafeCell with no concurrent mutation.
         unsafe {
             let mut cursor = self.head_next();
             while let Some(nn) = cursor {
-                if core::ptr::eq(nn.as_ptr().cast::<Link<T>>(), target) {
+                if core::ptr::eq(nn.as_ptr(), target.cast_mut()) {
                     return true;
                 }
-                cursor = nn.as_ref().get_next();
+                cursor = nn.as_ref().link().get_next();
             }
         }
         false
@@ -525,8 +485,8 @@ impl<T: Linked> ForwardList<T> {
         unsafe {
             let mut cursor = self.head_next();
             while let Some(nn) = cursor {
-                let next = nn.as_ref().get_next();
-                nn.as_ref().set_free();
+                let next = nn.as_ref().link().get_next();
+                nn.as_ref().link().set_free();
                 cursor = next;
             }
             self.set_head_next(None);
@@ -547,14 +507,14 @@ impl<T: Linked> ForwardList<T> {
         // next pointer, never touching Free nodes.  The sentinel is updated
         // at the end to point at the new first node.
         unsafe {
-            let mut prev: Option<NonNull<Link<T>>> = None;
+            let mut prev: Option<NonNull<T>> = None;
             let mut curr = self.head_next();
 
             while let Some(curr_nn) = curr {
                 // Save the original next before overwriting it.
-                let next = curr_nn.as_ref().get_next();
+                let next = curr_nn.as_ref().link().get_next();
                 // Redirect this node's next at the reversed tail so far.
-                curr_nn.as_ref().set_next(prev);
+                curr_nn.as_ref().link().set_next(prev);
                 prev = curr;
                 curr = next;
             }
@@ -576,18 +536,7 @@ impl<T: Linked> ForwardList<T> {
     }
 }
 
-impl<T: Linked> Drop for ForwardList<T> {
-    /// Marks all nodes still in the list as [`LinkState::Free`].
-    ///
-    /// Mirrors `~forward_list()` which calls `clear()`.  Without this, nodes
-    /// would be left in `InList` state after the owning list is dropped,
-    /// preventing them from being inserted into a new list.
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-impl<T: Linked> Default for ForwardList<T> {
+impl<T: Linked> Default for ForwardList<'_, T> {
     fn default() -> Self {
         Self::new()
     }
@@ -606,7 +555,7 @@ impl<T: Linked> Default for ForwardList<T> {
 ///
 /// Created by [`ForwardList::iter`].
 pub struct Iter<'a, T: Linked> {
-    current: Option<NonNull<Link<T>>>,
+    current: Option<NonNull<T>>,
     _marker: PhantomData<&'a T>,
 }
 
@@ -620,8 +569,8 @@ impl<'a, T: Linked> Iterator for Iter<'a, T> {
         // removed from the list while this iterator is alive.  We advance
         // `current` to the next link and return a reference to the current T.
         unsafe {
-            self.current = nn.as_ref().get_next();
-            Some(T::from_link_ptr(nn.as_ptr()).as_ref().unwrap_unchecked())
+            self.current = nn.as_ref().link().get_next();
+            Some(nn.as_ref())
         }
     }
 }
@@ -772,7 +721,11 @@ mod tests {
         list2.push_front(&n);
 
         assert_eq!(list1.len(), 1);
-        assert_eq!(list2.len(), 0, "node already in list1 must not appear in list2");
+        assert_eq!(
+            list2.len(),
+            0,
+            "node already in list1 must not appear in list2"
+        );
     }
 
     // ── Test 6: remove from beginning, middle, end of 3-element list ─────────
@@ -959,7 +912,10 @@ mod tests {
 
         // All nodes remain in use after reverse.
         for n in &nodes {
-            assert!(n.link.is_in_use(), "every node must still be in_use after reverse");
+            assert!(
+                n.link.is_in_use(),
+                "every node must still be in_use after reverse"
+            );
         }
     }
 
@@ -1009,7 +965,7 @@ mod tests {
     // ── Test 12: Drop of list marks all remaining nodes as Free ───────────────
 
     #[test]
-    fn test_drop_marks_nodes_free() {
+    fn test_clear_before_drop_marks_nodes_free() {
         let n1 = TestNode::new(1);
         let n2 = TestNode::new(2);
 
@@ -1019,20 +975,21 @@ mod tests {
             list.push_front(&n2);
             assert!(n1.link.is_in_use());
             assert!(n2.link.is_in_use());
-            // `list` is dropped here at end of inner scope.
+            list.clear();
         }
 
-        assert!(!n1.link.is_in_use(), "n1 must be Free after list is dropped");
-        assert!(!n2.link.is_in_use(), "n2 must be Free after list is dropped");
+        assert!(!n1.link.is_in_use(), "n1 must be Free after explicit clear");
+        assert!(!n2.link.is_in_use(), "n2 must be Free after explicit clear");
     }
 
     #[test]
-    fn test_node_reusable_after_list_drop() {
+    fn test_node_reusable_after_list_clear() {
         let n = TestNode::new(7);
         {
             let mut list: ForwardList<TestNode> = ForwardList::new();
             list.push_front(&n);
-        } // list dropped — n.link transitions to Free
+            list.clear();
+        }
 
         let mut list2: ForwardList<TestNode> = ForwardList::new();
         list2.push_front(&n); // must succeed — node is Free again
@@ -1162,9 +1119,8 @@ mod tests {
     // ── Extra: offset_of correctness — value readable through iterator ────────
 
     #[test]
-    fn test_offset_of_correctness_via_iter() {
-        // If offset_of or from_link_ptr is wrong, node.value reads will be
-        // garbage/UB.  Using distinctive sentinel values makes misalignment obvious.
+    fn test_node_identity_via_iter() {
+        // Distinctive values verify that iteration returns the exact inserted nodes.
         let mut list: ForwardList<TestNode> = ForwardList::new();
         let n1 = TestNode::new(0x0ABC_DEF0u32 as i32);
         let n2 = TestNode::new(0x1234_5678u32 as i32);

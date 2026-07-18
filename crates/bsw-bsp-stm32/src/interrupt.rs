@@ -53,3 +53,48 @@ impl Default for PrimaskLock {
         Self::new()
     }
 }
+
+/// Nestable critical section which restores the entry PRIMASK state.
+pub struct Stm32CriticalSection {
+    depth: u32,
+    was_masked: bool,
+}
+
+impl Stm32CriticalSection {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            depth: 0,
+            was_masked: false,
+        }
+    }
+}
+
+impl Default for Stm32CriticalSection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl bsw_platform::CriticalSection for Stm32CriticalSection {
+    fn acquire(&mut self) {
+        if self.depth == 0 {
+            self.was_masked = cortex_m::register::primask::read().is_active();
+            cortex_m::interrupt::disable();
+            cortex_m::asm::dsb();
+            cortex_m::asm::isb();
+        }
+        self.depth = self.depth.saturating_add(1);
+    }
+
+    fn release(&mut self) {
+        assert!(self.depth != 0, "unbalanced critical-section release");
+        self.depth -= 1;
+        if self.depth == 0 && !self.was_masked {
+            cortex_m::asm::dsb();
+            cortex_m::asm::isb();
+            // SAFETY: the outermost acquire observed interrupts enabled.
+            unsafe { cortex_m::interrupt::enable() };
+        }
+    }
+}

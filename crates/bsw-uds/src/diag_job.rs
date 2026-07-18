@@ -78,7 +78,6 @@ impl<'a> DiagRouter<'a> {
                 DiagResult::Ok => return job.process(request, response),
                 DiagResult::Nrc(nrc) => return Err(nrc),
                 DiagResult::NotResponsible => {}
-
             }
         }
         Err(Nrc::ServiceNotSupported)
@@ -131,21 +130,33 @@ mod tests {
 
     #[test]
     fn verify_prefix_match() {
-        let job = MockJob { prefix: &[0x22], session_mask: SessionMask::ALL, response_byte: 0x62 };
+        let job = MockJob {
+            prefix: &[0x22],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x62,
+        };
         let result = job.verify(&[0x22, 0xF1, 0x90], DiagSession::Default);
         assert_eq!(result, DiagResult::Ok);
     }
 
     #[test]
     fn verify_prefix_mismatch() {
-        let job = MockJob { prefix: &[0x22], session_mask: SessionMask::ALL, response_byte: 0x62 };
+        let job = MockJob {
+            prefix: &[0x22],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x62,
+        };
         let result = job.verify(&[0x27, 0x01], DiagSession::Default);
         assert_eq!(result, DiagResult::NotResponsible);
     }
 
     #[test]
     fn verify_too_short() {
-        let job = MockJob { prefix: &[0x22, 0xF1], session_mask: SessionMask::ALL, response_byte: 0x62 };
+        let job = MockJob {
+            prefix: &[0x22, 0xF1],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x62,
+        };
         // Only 1 byte — shorter than the 2-byte prefix.
         let result = job.verify(&[0x22], DiagSession::Default);
         assert_eq!(result, DiagResult::NotResponsible);
@@ -160,7 +171,10 @@ mod tests {
         };
         // Default session — not in EXTENDED mask.
         let result = job.verify(&[0x27, 0x01], DiagSession::Default);
-        assert_eq!(result, DiagResult::Nrc(Nrc::ServiceNotSupportedInActiveSession));
+        assert_eq!(
+            result,
+            DiagResult::Nrc(Nrc::ServiceNotSupportedInActiveSession)
+        );
     }
 
     #[test]
@@ -178,7 +192,11 @@ mod tests {
 
     #[test]
     fn dispatch_first_match() {
-        let job = MockJob { prefix: &[0x3E], session_mask: SessionMask::ALL, response_byte: 0x7E };
+        let job = MockJob {
+            prefix: &[0x3E],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x7E,
+        };
         let jobs: &[&dyn DiagJob] = &[&job];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -189,7 +207,11 @@ mod tests {
 
     #[test]
     fn dispatch_no_match_returns_service_not_supported() {
-        let job = MockJob { prefix: &[0x22], session_mask: SessionMask::ALL, response_byte: 0x62 };
+        let job = MockJob {
+            prefix: &[0x22],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x62,
+        };
         let jobs: &[&dyn DiagJob] = &[&job];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -214,8 +236,16 @@ mod tests {
 
     #[test]
     fn dispatch_multiple_jobs_first_wins() {
-        let job_a = MockJob { prefix: &[0x22], session_mask: SessionMask::ALL, response_byte: 0xAA };
-        let job_b = MockJob { prefix: &[0x22], session_mask: SessionMask::ALL, response_byte: 0xBB };
+        let job_a = MockJob {
+            prefix: &[0x22],
+            session_mask: SessionMask::ALL,
+            response_byte: 0xAA,
+        };
+        let job_b = MockJob {
+            prefix: &[0x22],
+            session_mask: SessionMask::ALL,
+            response_byte: 0xBB,
+        };
         let jobs: &[&dyn DiagJob] = &[&job_a, &job_b];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -227,8 +257,16 @@ mod tests {
 
     #[test]
     fn dispatch_skips_non_matching_jobs() {
-        let job_a = MockJob { prefix: &[0x11], session_mask: SessionMask::ALL, response_byte: 0x51 };
-        let job_b = MockJob { prefix: &[0x3E], session_mask: SessionMask::ALL, response_byte: 0x7E };
+        let job_a = MockJob {
+            prefix: &[0x11],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x51,
+        };
+        let job_b = MockJob {
+            prefix: &[0x3E],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x7E,
+        };
         let jobs: &[&dyn DiagJob] = &[&job_a, &job_b];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -240,7 +278,10 @@ mod tests {
 
     #[test]
     fn dispatch_job_process_error_propagated() {
-        let job = ErrorJob { prefix: &[0x85], nrc: Nrc::ConditionsNotCorrect };
+        let job = ErrorJob {
+            prefix: &[0x85],
+            nrc: Nrc::ConditionsNotCorrect,
+        };
         let jobs: &[&dyn DiagJob] = &[&job];
         let router = DiagRouter::new(jobs);
         let mut buf = [0u8; 8];
@@ -270,7 +311,11 @@ mod tests {
 
     #[test]
     fn min_request_length_defaults_to_prefix_len() {
-        let job = MockJob { prefix: &[0x22, 0xF1], session_mask: SessionMask::ALL, response_byte: 0x62 };
+        let job = MockJob {
+            prefix: &[0x22, 0xF1],
+            session_mask: SessionMask::ALL,
+            response_byte: 0x62,
+        };
         assert_eq!(job.min_request_length(), 2);
     }
 }

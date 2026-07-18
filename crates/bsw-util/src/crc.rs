@@ -270,13 +270,7 @@ impl Crc8 {
     ///
     /// All parameters are evaluated at compile time when used in a `const`
     /// context.
-    pub const fn new(
-        poly: u8,
-        init: u8,
-        reflect_in: bool,
-        reflect_out: bool,
-        xor_out: u8,
-    ) -> Self {
+    pub const fn new(poly: u8, init: u8, reflect_in: bool, reflect_out: bool, xor_out: u8) -> Self {
         let (table, reflected) = if reflect_in {
             (make_table_u8_reflected(reflect_u8(poly)), true)
         } else {
@@ -529,10 +523,13 @@ pub const CRC8_CCITT: Crc8 = Crc8::new(0x07, 0x00, false, false, 0x00);
 /// Check value for `b"123456789"`: **0xD0**.
 pub const CRC8_ROHC: Crc8 = Crc8::new(0x07, 0xFF, true, true, 0x00);
 
-/// CRC-8/SAE-J1850: poly=0x1D, init=0xFF, no reflection, xorout=0xFF.
-///
-/// Check value for `b"123456789"`: **0x4B**.
+/// CRC-8/SAE-J1850 catalogue profile used by the project E2E extension:
+/// poly=0x1D, init=0xFF, no reflection, xorout=0xFF.
 pub const CRC8_SAE_J1850: Crc8 = Crc8::new(0x1D, 0xFF, false, false, 0xFF);
+
+/// Pinned OpenBSW `Crc8::Saej1850`: poly=0x1D, init=0, no reflection,
+/// xorout=0. Its `"123456789"` check value is `0x37`.
+pub const CRC8_SAEJ1850_OPENBSW: Crc8 = Crc8::new(0x1D, 0x00, false, false, 0x00);
 
 /// CRC-8/H2F (AUTOSAR): poly=0x2F, init=0xFF, no reflection, xorout=0xFF.
 ///
@@ -543,6 +540,9 @@ pub const CRC8_H2F: Crc8 = Crc8::new(0x2F, 0xFF, false, false, 0xFF);
 ///
 /// Check value for `b"123456789"`: **0xA1**.
 pub const CRC8_MAXIM: Crc8 = Crc8::new(0x31, 0x00, true, true, 0x00);
+
+/// OpenBSW `Crc8::Crc8F_3`: poly=0xCF, init=0, no reflection, xorout=0.
+pub const CRC8_F3: Crc8 = Crc8::new(0xCF, 0x00, false, false, 0x00);
 
 // --- CRC-16 ---
 
@@ -558,6 +558,10 @@ pub const CRC16_CCITT: Crc16 = Crc16::new(0x1021, 0xFFFF, false, false, 0x0000);
 ///
 /// Check value for `b"123456789"`: **0xCBF4_3926**.
 pub const CRC32_ETHERNET: Crc32 = Crc32::new(0x04C1_1DB7, 0xFFFF_FFFF, true, true, 0xFFFF_FFFF);
+
+/// OpenBSW `Crc32::ARE2EP4`: poly=0xF4ACFB13, init/xorout=0xFFFFFFFF,
+/// reflected input and output.
+pub const CRC32_ARE2EP4: Crc32 = Crc32::new(0xF4AC_FB13, 0xFFFF_FFFF, true, true, 0xFFFF_FFFF);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -586,6 +590,7 @@ mod tests {
     #[test]
     fn crc8_sae_j1850_check_value() {
         assert_eq!(CRC8_SAE_J1850.checksum(CHECK_INPUT), 0x4B);
+        assert_eq!(CRC8_SAEJ1850_OPENBSW.checksum(CHECK_INPUT), 0x37);
     }
 
     #[test]

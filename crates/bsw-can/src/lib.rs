@@ -7,13 +7,25 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod can_id;
+pub mod dlc;
+pub mod error_state;
 pub mod filter;
 pub mod frame;
+pub mod listener;
+#[cfg(all(feature = "socketcan", target_os = "linux"))]
+pub mod socketcan;
 pub mod transceiver;
+#[cfg(feature = "std")]
+pub mod virtual_bus;
 
 pub use can_id::CanId;
+pub use error_state::{BusLoadEstimator, ErrorStateTracker};
 pub use filter::{BitFieldFilter, Filter, IntervalFilter};
-pub use frame::{CanFrame, MAX_FRAME_LENGTH};
+pub use frame::{CanFrame, FrameError, MAX_FRAME_LENGTH};
+pub use listener::{
+    FrameDispatcher, FrameListener, FrameSource, ListenerAction, ListenerError, ListenerHandle,
+    StateListener,
+};
 pub use transceiver::{
     AbstractTransceiver, CanTransceiver, ErrorCode, State, Statistics, TransceiverState,
 };

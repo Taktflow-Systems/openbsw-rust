@@ -47,6 +47,7 @@ const OTYPER: usize = 0x04;
 const OSPEEDR: usize = 0x08;
 const PUPDR: usize = 0x0C;
 const IDR: usize = 0x10;
+const ODR: usize = 0x14;
 const BSRR: usize = 0x18;
 
 /// RCC base and GPIO clock enable register offset.
@@ -61,12 +62,12 @@ const RCC_GPIO_ENR: (usize, usize) = (0x4002_3800, 0x30);
 
 #[inline(always)]
 unsafe fn reg_read(addr: usize) -> u32 {
-    unsafe { core::ptr::read_volatile(addr as *const u32) }
+    unsafe { crate::mmio::read(addr as *const u32) }
 }
 
 #[inline(always)]
 unsafe fn reg_write(addr: usize, val: u32) {
-    unsafe { core::ptr::write_volatile(addr as *mut u32, val) }
+    unsafe { crate::mmio::write(addr as *mut u32, val) }
 }
 
 #[inline(always)]
@@ -82,6 +83,11 @@ pub struct OutputPin {
 }
 
 impl OutputPin {
+    /// Create the first application GPIO output from the unique GPIO token.
+    pub fn from_token(_token: crate::board::Gpio, port: Port, pin: u8) -> Self {
+        Self::new(port, pin)
+    }
+
     /// Configure a pin as push-pull output and enable its port clock.
     pub fn new(port: Port, pin: u8) -> Self {
         assert!(pin < 16, "pin must be 0..15");
@@ -135,11 +141,32 @@ impl OutputPin {
     /// Read the current output state from ODR.
     #[inline]
     pub fn is_high(&self) -> bool {
-        unsafe { (reg_read(self.base + IDR) >> self.pin) & 1 == 1 }
+        unsafe { (reg_read(self.base + ODR) >> self.pin) & 1 == 1 }
+    }
+}
+
+impl crate::gpio_manager::DigitalOutput for OutputPin {
+    fn set(&mut self, high: bool) {
+        if high {
+            self.set_high();
+        } else {
+            self.set_low();
+        }
+    }
+
+    fn is_set_high(&self) -> bool {
+        self.is_high()
+    }
+}
+
+impl crate::gpio_manager::DigitalInput for InputPin {
+    fn is_high(&self) -> bool {
+        self.is_high()
     }
 }
 
 /// Pull-up/pull-down configuration for input pins.
+#[derive(Clone, Copy)]
 pub enum Pull {
     None,
     Up,

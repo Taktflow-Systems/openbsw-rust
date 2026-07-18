@@ -475,7 +475,11 @@ impl<const N: usize, const M: usize> ShlAssign<usize> for Bitset<N, M> {
             }
         } else {
             for i in (0..M).rev() {
-                let src = if i >= word_shift { self.words[i - word_shift] } else { 0 };
+                let src = if i >= word_shift {
+                    self.words[i - word_shift]
+                } else {
+                    0
+                };
                 let src_lo = if i > word_shift {
                     self.words[i - word_shift - 1]
                 } else {
@@ -640,7 +644,11 @@ mod tests {
         for i in (0..64usize).step_by(2) {
             bs.set(i);
         }
-        assert_eq!(bs.count(), 32, "every other bit set in 64-bit set = 32 bits");
+        assert_eq!(
+            bs.count(),
+            32,
+            "every other bit set in 64-bit set = 32 bits"
+        );
     }
 
     #[test]
@@ -916,7 +924,10 @@ mod tests {
         let mut bs: Bs32 = Bitset::new();
         bs.set_all();
         let shifted = bs >> 100;
-        assert!(shifted.none(), "shift right by > N must produce zero bitset");
+        assert!(
+            shifted.none(),
+            "shift right by > N must produce zero bitset"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1043,14 +1054,20 @@ mod tests {
     fn unused_bits_always_zero_after_flip_all() {
         let mut bs: Bs33 = Bitset::new();
         bs.flip_all();
-        assert_eq!(bs.words[1], 1, "flip_all: only bit 32 should be set in last word");
+        assert_eq!(
+            bs.words[1], 1,
+            "flip_all: only bit 32 should be set in last word"
+        );
     }
 
     #[test]
     fn unused_bits_always_zero_after_not() {
         let bs: Bs33 = Bitset::new();
         let inv = !bs;
-        assert_eq!(inv.words[1], 1, "NOT: only bit 32 should be set in last word");
+        assert_eq!(
+            inv.words[1], 1,
+            "NOT: only bit 32 should be set in last word"
+        );
     }
 
     #[test]
@@ -1059,7 +1076,11 @@ mod tests {
         bs.set_all();
         let shifted = bs << 1;
         // After shift: bit 33 would be bit 34, but N=33 so it's masked.
-        assert_eq!(shifted.words[1] & !1u32, 0, "upper word high bits must be zero after shl");
+        assert_eq!(
+            shifted.words[1] & !1u32,
+            0,
+            "upper word high bits must be zero after shl"
+        );
     }
 
     #[test]
@@ -1152,7 +1173,11 @@ mod tests {
         assert!(bs.all());
 
         let half = bs >> 64;
-        assert_eq!(half.count(), 64, "shr 64 on all-ones 128-bit set should yield 64 set bits");
+        assert_eq!(
+            half.count(),
+            64,
+            "shr 64 on all-ones 128-bit set should yield 64 set bits"
+        );
         for i in 0..64usize {
             assert!(half.test(i));
         }
@@ -1237,7 +1262,10 @@ mod tests {
     fn binary_format_msb_first() {
         let bs: Bs8 = Bitset::from_u64(0b1000_0001);
         let s = std::format!("{bs:b}");
-        assert_eq!(s, "10000001", "binary format: MSB first, 8 digits, got: {s}");
+        assert_eq!(
+            s, "10000001",
+            "binary format: MSB first, 8 digits, got: {s}"
+        );
     }
 
     // -----------------------------------------------------------------------

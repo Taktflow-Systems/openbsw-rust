@@ -29,6 +29,15 @@ pub struct TransportParameters {
     ///
     /// Should be at least `HEADER_SIZE + max_payload_size`.
     pub tcp_rx_buffer_size: u32,
+
+    /// Maximum number of concurrently routing TCP connections per socket
+    /// group.  Admission additionally allows one extra connection to enter
+    /// activation so the alive-check arbitration can displace a stale
+    /// connection.
+    ///
+    /// Upstream: `IDoIpServerTransportLayerCallback::getMaxConnectionCount`
+    /// (`executables/referenceApp/application/src/systems/DoIpServerSystem.cpp`).
+    pub max_connection_count: u8,
 }
 
 impl Default for TransportParameters {
@@ -39,6 +48,7 @@ impl Default for TransportParameters {
             alive_check_timeout_ms: 500,
             max_payload_size: 4_096,
             tcp_rx_buffer_size: 4_104, // 8-byte header + 4096 payload
+            max_connection_count: 5,
         }
     }
 }
@@ -49,6 +59,8 @@ impl Default for TransportParameters {
 
 #[cfg(test)]
 mod tests {
+    use std::format;
+
     use super::*;
 
     #[test]
@@ -59,6 +71,7 @@ mod tests {
         assert_eq!(p.alive_check_timeout_ms, 500);
         assert_eq!(p.max_payload_size, 4_096);
         assert_eq!(p.tcp_rx_buffer_size, 4_104);
+        assert_eq!(p.max_connection_count, 5);
     }
 
     #[test]
@@ -69,9 +82,11 @@ mod tests {
             alive_check_timeout_ms: 250,
             max_payload_size: 8_192,
             tcp_rx_buffer_size: 8_200,
+            max_connection_count: 2,
         };
         assert_eq!(p.inactivity_timeout_ms, 1_000);
         assert_eq!(p.tcp_rx_buffer_size, 8_200);
+        assert_eq!(p.max_connection_count, 2);
     }
 
     #[test]

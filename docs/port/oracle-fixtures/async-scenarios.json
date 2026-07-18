@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "source": [
+    "libs/bsw/async/test/src/async/TestContextTest.cpp",
+    "libs/bsw/asyncImpl/test/src/async/RunnableExecutorTest.cpp"
+  ],
+  "scenarios": [
+    {
+      "name": "posted_runnables_preserve_deterministic_order",
+      "posts": [1, 1, 0],
+      "expected_runs": [0, 1],
+      "rule": "duplicate pending posts coalesce"
+    },
+    {
+      "name": "cancel_pending_runnable",
+      "posts": [0],
+      "cancels": [0],
+      "expected_runs": []
+    },
+    {
+      "name": "runnable_reposts_itself",
+      "posts": [0],
+      "repost_until_count": 3,
+      "first_budget": 2,
+      "expected_total_runs": 3
+    }
+  ],
+  "rust_evidence": "crates/bsw-async/src/lib.rs tests"
+}

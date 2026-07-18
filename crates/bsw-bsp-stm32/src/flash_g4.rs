@@ -26,7 +26,6 @@
 const FLASH_BASE: u32 = 0x4002_2000;
 
 /// Access-control register (cache enable, wait states — already set by clock_g4).
-const FLASH_ACR: *mut u32 = (FLASH_BASE + 0x000) as *mut u32;
 /// Key register — write unlock sequence to clear the LOCK bit in CR.
 const FLASH_KEYR: *mut u32 = (FLASH_BASE + 0x008) as *mut u32;
 /// Status register.
@@ -52,12 +51,13 @@ const CR_PNB_SHIFT: u32 = 3;
 const CR_PNB_MASK: u32 = 0xFF << CR_PNB_SHIFT;
 /// Start erase operation.
 const CR_STRT: u32 = 1 << 16;
+const CR_BKER: u32 = 1 << 11;
 /// Lock bit — set to re-enable write protection, clear via unlock sequence.
 const CR_LOCK: u32 = 1 << 31;
 
 // --- Unlock keys (RM0440 §3.3.5) ---
-const KEY1: u32 = 0x45670123;
-const KEY2: u32 = 0xCDEF89AB;
+const KEY1: u32 = 0x4567_0123;
+const KEY2: u32 = 0xCDEF_89AB;
 
 // ---------------------------------------------------------------------------
 // Flash address constants
@@ -97,13 +97,13 @@ pub const NVM_PAGE_COUNT: u8 = 4;
 #[inline(always)]
 unsafe fn read_reg(reg: *const u32) -> u32 {
     // SAFETY: caller guarantees the pointer is a valid MMIO address.
-    unsafe { core::ptr::read_volatile(reg) }
+    unsafe { crate::mmio::read(reg) }
 }
 
 #[inline(always)]
 unsafe fn write_reg(reg: *mut u32, val: u32) {
     // SAFETY: caller guarantees the pointer is a valid MMIO address.
-    unsafe { core::ptr::write_volatile(reg, val) }
+    unsafe { crate::mmio::write(reg, val) }
 }
 
 #[inline(always)]
@@ -193,10 +193,15 @@ impl FlashG4 {
     pub unsafe fn wait_ready() -> bool {
         // SAFETY: polling FLASH_SR is safe (read-only status register).
         unsafe {
-            while Self::is_busy() {
+            let mut polls = 20_000_000u32;
+            while Self::is_busy() && polls != 0 {
                 // Insert a compiler fence to prevent the optimizer from hoisting
                 // the load out of the loop.
                 core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+                polls -= 1;
+            }
+            if polls == 0 {
+                return false;
             }
             // Return false if any error flag is set.
             read_reg(FLASH_SR as *const u32) & SR_ERROR_MASK == 0
@@ -263,11 +268,10 @@ impl FlashG4 {
             //   Bank 2: pages 128-255 → PNB = page_num - 128, BKER = 1
             //
             // PNB [10:3] = 8-bit page number within bank (0-127).
-            const CR_BKER: u32 = 1 << 11;
             let (pnb, bker) = if page_num >= 128 {
-                ((page_num - 128) as u32, CR_BKER)
+                (u32::from(page_num - 128), CR_BKER)
             } else {
-                (page_num as u32, 0)
+                (u32::from(page_num), 0)
             };
             modify_reg(FLASH_CR, |v| {
                 let v = v & !(CR_PNB_MASK | CR_BKER);
@@ -327,7 +331,7 @@ impl FlashG4 {
         if addr & 0x7 != 0 {
             return false;
         }
-        if addr < FLASH_BASE_ADDR || addr > FLASH_BASE_ADDR + FLASH_SIZE - 8 {
+        if !(FLASH_BASE_ADDR..=FLASH_BASE_ADDR + FLASH_SIZE - 8).contains(&addr) {
             return false;
         }
 
@@ -344,8 +348,8 @@ impl FlashG4 {
             // 3. Write the two 32-bit words (little-endian on Cortex-M).
             let lo = data as u32;
             let hi = (data >> 32) as u32;
-            core::ptr::write_volatile(addr as *mut u32, lo);
-            core::ptr::write_volatile((addr + 4) as *mut u32, hi);
+            crate::mmio::write(addr as *mut u32, lo);
+            crate::mmio::write((addr + 4) as *mut u32, hi);
 
             // 4. Wait for completion.
             let ok = Self::wait_ready();

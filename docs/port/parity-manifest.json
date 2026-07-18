@@ -1,0 +1,846 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "repository": "https://github.com/eclipse-openbsw/openbsw",
+    "commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "status_values": [
+    "done",
+    "partial",
+    "missing",
+    "native replacement",
+    "excluded"
+  ],
+  "mandatory_platforms": [
+    "posix",
+    "stm32f413",
+    "stm32g474"
+  ],
+  "optional_platforms": [
+    "s32k148evb"
+  ],
+  "rows": [
+    {
+      "id": "bsw.async",
+      "upstream_path": "libs/bsw/async",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-async"
+      ],
+      "owner_packages": [
+        "C09-C11"
+      ],
+      "evidence": [
+        "crates/bsw-async",
+        "docs/port/oracle-fixtures/async-scenarios.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/async/test"
+      ]
+    },
+    {
+      "id": "bsw.asyncConsole",
+      "upstream_path": "libs/bsw/asyncConsole",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-console"
+      ],
+      "owner_packages": [
+        "C16-C18"
+      ],
+      "evidence": [
+        "crates/bsw-console/src/task.rs",
+        "crates/bsw-console/src/posix.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/asyncConsole/test"
+      ]
+    },
+    {
+      "id": "bsw.asyncFreeRtos",
+      "upstream_path": "libs/bsw/asyncFreeRtos",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-async"
+      ],
+      "owner_packages": [
+        "C09-C11"
+      ],
+      "evidence": [
+        "crates/bsw-async/src/cyclic.rs",
+        "crates/bsw-async/src/posix.rs",
+        "docs/architecture/adr-0001-port-boundaries.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/asyncFreeRtos/test"
+      ]
+    },
+    {
+      "id": "bsw.asyncImpl",
+      "upstream_path": "libs/bsw/asyncImpl",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-async"
+      ],
+      "owner_packages": [
+        "C09-C11"
+      ],
+      "evidence": [
+        "crates/bsw-async",
+        "crates/bsw-async/tests/posix_executor.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/asyncImpl/test"
+      ]
+    },
+    {
+      "id": "bsw.asyncThreadX",
+      "upstream_path": "libs/bsw/asyncThreadX",
+      "scope": "mandatory",
+      "status": "excluded",
+      "strategy": "FreeRTOS/POSIX Rust executors replace ThreadX",
+      "rust_crates": [],
+      "owner_packages": [
+        "C09-C11"
+      ],
+      "evidence": [
+        "docs/architecture/adr-0001-port-boundaries.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.bsp",
+      "upstream_path": "libs/bsw/bsp",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port contracts and implement per board",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "D03",
+        "G01-G20"
+      ],
+      "evidence": [
+        "crates/bsw-bsp-stm32",
+        "docs/port/upstream-test-inventory.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/bsp/test"
+      ]
+    },
+    {
+      "id": "bsw.common",
+      "upstream_path": "libs/bsw/common",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-common"
+      ],
+      "owner_packages": [
+        "C01"
+      ],
+      "evidence": [
+        "crates/bsw-common",
+        "docs/architecture/adr-0001-port-boundaries.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.cpp2can",
+      "upstream_path": "libs/bsw/cpp2can",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-can"
+      ],
+      "owner_packages": [
+        "D12-D16"
+      ],
+      "evidence": [
+        "crates/bsw-can",
+        "docs/port/can-parity.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/cpp2can/test"
+      ]
+    },
+    {
+      "id": "bsw.cpp2ethernet",
+      "upstream_path": "libs/bsw/cpp2ethernet",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-ethernet"
+      ],
+      "owner_packages": [
+        "D17-D21"
+      ],
+      "evidence": [
+        "crates/bsw-ethernet",
+        "docs/port/ethernet-parity.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/cpp2ethernet/test"
+      ]
+    },
+    {
+      "id": "bsw.docan",
+      "upstream_path": "libs/bsw/docan",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-docan"
+      ],
+      "owner_packages": [
+        "E09-E13"
+      ],
+      "evidence": [
+        "crates/bsw-docan",
+        "docs/port/docan-parity.md",
+        "docs/port/oracle-fixtures/docan-rust.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/docan/test"
+      ]
+    },
+    {
+      "id": "bsw.doip",
+      "upstream_path": "libs/bsw/doip",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-doip"
+      ],
+      "owner_packages": [
+        "E26-E31"
+      ],
+      "evidence": [
+        "crates/bsw-doip",
+        "crates/bsw-doip/tests/diagnostic_transport.rs",
+        "crates/bsw-doip/tests/posix_entity.rs",
+        "fuzz/fuzz_targets/doip_tcp.rs",
+        "fuzz/fuzz_targets/doip_diagnostic.rs",
+        "docs/port/oracle-fixtures/doip-routing-openbsw.json",
+        "docs/port/oracle-fixtures/doip-alive-openbsw.json",
+        "docs/port/oracle-fixtures/doip-diagnostic-openbsw.json",
+        "docs/port/doip-parity.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/doip/test"
+      ]
+    },
+    {
+      "id": "bsw.estd",
+      "upstream_path": "libs/bsw/estd",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native Rust fixed-capacity types",
+      "rust_crates": [
+        "bsw-estd"
+      ],
+      "owner_packages": [
+        "C02-C04"
+      ],
+      "evidence": [
+        "crates/bsw-estd",
+        "docs/port/estd-parity.md",
+        "docs/port/safety-verification-2026-07-18.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.io",
+      "upstream_path": "libs/bsw/io",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-io"
+      ],
+      "owner_packages": [
+        "D04-D05"
+      ],
+      "evidence": [
+        "crates/bsw-io",
+        "crates/bsw-io/tests/conformance.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/io/test"
+      ]
+    },
+    {
+      "id": "bsw.lifecycle",
+      "upstream_path": "libs/bsw/lifecycle",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-lifecycle"
+      ],
+      "owner_packages": [
+        "D01-D02"
+      ],
+      "evidence": [
+        "crates/bsw-lifecycle/src/runlevel.rs",
+        "crates/bsw-lifecycle/tests/runlevel.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/lifecycle/test"
+      ]
+    },
+    {
+      "id": "bsw.logger",
+      "upstream_path": "libs/bsw/logger",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-logger"
+      ],
+      "owner_packages": [
+        "C13-C14"
+      ],
+      "evidence": [
+        "crates/bsw-logger/src/lib.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/logger/test"
+      ]
+    },
+    {
+      "id": "bsw.loggerIntegration",
+      "upstream_path": "libs/bsw/loggerIntegration",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-logger"
+      ],
+      "owner_packages": [
+        "C13-C14"
+      ],
+      "evidence": [
+        "crates/bsw-logger/src/buffer.rs"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.lwipSocket",
+      "upstream_path": "libs/bsw/lwipSocket",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "port boundary",
+      "rust_crates": [
+        "bsw-ethernet"
+      ],
+      "owner_packages": [
+        "D20"
+      ],
+      "evidence": [
+        "crates/bsw-ethernet/src/lwip.rs",
+        "docs/port/ethernet-parity.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/lwipSocket/test"
+      ]
+    },
+    {
+      "id": "bsw.middleware",
+      "upstream_path": "libs/bsw/middleware",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-middleware"
+      ],
+      "owner_packages": [
+        "E05-E08"
+      ],
+      "evidence": [
+        "crates/bsw-middleware",
+        "crates/bsw-middleware/tests/middleware.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/middleware/test"
+      ]
+    },
+    {
+      "id": "bsw.platform",
+      "upstream_path": "libs/bsw/platform",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native platform traits",
+      "rust_crates": [
+        "bsw-platform",
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "D03",
+        "F01",
+        "G01"
+      ],
+      "evidence": [
+        "crates/bsw-platform",
+        "docs/port/upstream-test-inventory.md",
+        "docs/port/stm32-parity.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/platform/test"
+      ]
+    },
+    {
+      "id": "bsw.runtime",
+      "upstream_path": "libs/bsw/runtime",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-runtime"
+      ],
+      "owner_packages": [
+        "C12"
+      ],
+      "evidence": [
+        "crates/bsw-runtime",
+        "docs/port/upstream-test-inventory.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/runtime/test"
+      ]
+    },
+    {
+      "id": "bsw.stdioConsoleInput",
+      "upstream_path": "libs/bsw/stdioConsoleInput",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-console"
+      ],
+      "owner_packages": [
+        "C15-C17"
+      ],
+      "evidence": [
+        "crates/bsw-console/src/lib.rs",
+        "crates/bsw-console/src/posix.rs"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.storage",
+      "upstream_path": "libs/bsw/storage",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-storage",
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "D06-D11",
+        "G11"
+      ],
+      "evidence": [
+        "crates/bsw-storage",
+        "crates/bsw-storage/tests/cut_points.rs",
+        "crates/bsw-bsp-stm32/src/storage_g4.rs",
+        "crates/bsw-bsp-stm32/src/flash_f4.rs",
+        "crates/bsw-bsp-stm32/src/storage_conformance.rs",
+        "docs/test-evidence/samples/g01-g11-stm32-convergence.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/storage/test"
+      ]
+    },
+    {
+      "id": "bsw.timer",
+      "upstream_path": "libs/bsw/timer",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native replacement",
+      "rust_crates": [
+        "bsw-time",
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "C07-C08",
+        "G05"
+      ],
+      "evidence": [
+        "crates/bsw-time",
+        "crates/bsw-bsp-stm32",
+        "docs/port/upstream-test-inventory.md",
+        "crates/bsw-bsp-stm32/src/timer.rs",
+        "docs/port/stm32-parity.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/timer/test"
+      ]
+    },
+    {
+      "id": "bsw.transport",
+      "upstream_path": "libs/bsw/transport",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-transport"
+      ],
+      "owner_packages": [
+        "E01-E02"
+      ],
+      "evidence": [
+        "crates/bsw-transport",
+        "crates/bsw-transport/tests/transport_routing.rs"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/transport/test"
+      ]
+    },
+    {
+      "id": "bsw.transportRouterSimple",
+      "upstream_path": "libs/bsw/transportRouterSimple",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-transport"
+      ],
+      "owner_packages": [
+        "E03-E04"
+      ],
+      "evidence": [
+        "crates/bsw-transport/src/simple_router.rs",
+        "crates/bsw-transport/src/routing.rs",
+        "crates/bsw-transport/tests/transport_routing.rs"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.uds",
+      "upstream_path": "libs/bsw/uds",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "port behavior",
+      "rust_crates": [
+        "bsw-uds"
+      ],
+      "owner_packages": [
+        "E14-E25"
+      ],
+      "evidence": [
+        "crates/bsw-uds",
+        "docs/port/uds-parity.md",
+        "docs/port/oracle-fixtures/uds-rust.json"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/uds/test"
+      ]
+    },
+    {
+      "id": "bsw.util",
+      "upstream_path": "libs/bsw/util",
+      "scope": "mandatory",
+      "status": "native replacement",
+      "strategy": "native Rust utilities",
+      "rust_crates": [
+        "bsw-util",
+        "bsw-common",
+        "bsw-estd"
+      ],
+      "owner_packages": [
+        "C05-C06"
+      ],
+      "evidence": [
+        "crates/bsw-util",
+        "docs/port/util-parity.md",
+        "docs/port/oracle-fixtures/crc-openbsw.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/util/test"
+      ]
+    },
+    {
+      "id": "bsp.bspCharInputOutput",
+      "upstream_path": "libs/bsp/bspCharInputOutput",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native console traits",
+      "rust_crates": [
+        "bsw-console",
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "C18",
+        "G06"
+      ],
+      "evidence": [
+        "crates/bsw-console/src/chario.rs",
+        "crates/bsw-bsp-stm32/src/uart_f4.rs",
+        "crates/bsw-bsp-stm32/src/uart_g4.rs"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsp.bspDynamicClient",
+      "upstream_path": "libs/bsp/bspDynamicClient",
+      "scope": "mandatory",
+      "status": "missing",
+      "strategy": "port behavior",
+      "rust_crates": [],
+      "owner_packages": [
+        "G01-G15"
+      ],
+      "evidence": [
+        "docs/port/upstream-baseline.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsp.bspInputManager",
+      "upstream_path": "libs/bsp/bspInputManager",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native platform traits",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "G07",
+        "G09"
+      ],
+      "evidence": [
+        "crates/bsw-bsp-stm32/src/gpio_manager.rs",
+        "crates/bsw-bsp-stm32/src/adc.rs",
+        "docs/port/stm32-parity.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsp.bspInterrupts",
+      "upstream_path": "libs/bsp/bspInterrupts",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native Cortex-M implementation",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "G02-G04"
+      ],
+      "evidence": [
+        "crates/bsw-bsp-stm32/src/can_isr.rs",
+        "crates/bsw-bsp-stm32/src/can_health.rs",
+        "docs/port/stm32-parity.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsp.bspOutputManager",
+      "upstream_path": "libs/bsp/bspOutputManager",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native platform traits",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "G07"
+      ],
+      "evidence": [
+        "crates/bsw-bsp-stm32/src/gpio_manager.rs",
+        "crates/bsw-bsp-stm32/src/board_apps.rs",
+        "docs/port/stm32-parity.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "bsp.bspOutputPwm",
+      "upstream_path": "libs/bsp/bspOutputPwm",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native platform traits",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
+      "owner_packages": [
+        "G08"
+      ],
+      "evidence": [
+        "crates/bsw-bsp-stm32/src/pwm.rs",
+        "docs/port/stm32-parity.md",
+        "docs/test-evidence/samples/g01-g11-stm32-convergence.json"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "safety.safeMonitor",
+      "upstream_path": "libs/safety/safeMonitor",
+      "scope": "mandatory",
+      "status": "missing",
+      "strategy": "port behavior",
+      "rust_crates": [],
+      "owner_packages": [
+        "H01-H09"
+      ],
+      "evidence": [
+        "docs/port/upstream-baseline.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "safety.safeUtils",
+      "upstream_path": "libs/safety/safeUtils",
+      "scope": "mandatory",
+      "status": "missing",
+      "strategy": "port behavior",
+      "rust_crates": [],
+      "owner_packages": [
+        "H01-H09"
+      ],
+      "evidence": [
+        "docs/port/upstream-baseline.md"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "platform.posix",
+      "upstream_path": "platforms/posix",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "native POSIX adapters",
+      "rust_crates": [
+        "bsw-platform-posix"
+      ],
+      "owner_packages": [
+        "F01"
+      ],
+      "evidence": [
+        "crates/bsw-platform-posix",
+        "crates/bsw-platform-posix/tests/conformance.rs",
+        "docs/port/reference-app-parity.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": [
+        "platforms/posix"
+      ]
+    },
+    {
+      "id": "app.referenceApp",
+      "upstream_path": "executables/referenceApp",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "compose equivalent Rust application",
+      "rust_crates": [
+        "openbsw-reference-app"
+      ],
+      "owner_packages": [
+        "F02-F10"
+      ],
+      "evidence": [
+        "crates/openbsw-reference-app",
+        "crates/openbsw-reference-app/tests/reference_app.rs",
+        "docs/port/oracle-fixtures/reference-app-openbsw.json",
+        "docs/port/oracle-fixtures/reference-app-rust.json",
+        "docs/port/reference-app-parity.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": [
+        "executables/referenceApp"
+      ]
+    },
+    {
+      "id": "platform.s32k1xx",
+      "upstream_path": "platforms/s32k1xx",
+      "scope": "optional",
+      "status": "excluded",
+      "strategy": "optional expansion after mandatory release",
+      "rust_crates": [],
+      "owner_packages": [
+        "S01-S18"
+      ],
+      "evidence": [
+        "docs/plans/plan-rust-bsw-full-integration.md"
+      ],
+      "candidate_test_roots": [
+        "platforms/s32k1xx"
+      ]
+    },
+    {
+      "id": "extension.com",
+      "upstream_path": null,
+      "scope": "project extension",
+      "status": "done",
+      "strategy": "retain and harden",
+      "rust_crates": [
+        "bsw-com"
+      ],
+      "owner_packages": [
+        "E32-E33"
+      ],
+      "evidence": [
+        "crates/bsw-com",
+        "crates/bsw-com/tests/com_scheduling.rs",
+        "crates/bsw-com/tests/packing_properties.rs",
+        "docs/port/com-parity.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "extension.e2e",
+      "upstream_path": null,
+      "scope": "project extension",
+      "status": "done",
+      "strategy": "label and harden",
+      "rust_crates": [
+        "bsw-util",
+        "bsw-com"
+      ],
+      "owner_packages": [
+        "E34"
+      ],
+      "evidence": [
+        "crates/bsw-util/src/e2e.rs",
+        "crates/bsw-com/tests/e2e_integration.rs",
+        "docs/port/e2e-parity.md",
+        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+      ],
+      "candidate_test_roots": []
+    },
+    {
+      "id": "extension.can-fd",
+      "upstream_path": null,
+      "scope": "project extension",
+      "status": "done",
+      "strategy": "retain and harden",
+      "rust_crates": [
+        "bsw-can"
+      ],
+      "owner_packages": [
+        "D14"
+      ],
+      "evidence": [
+        "crates/bsw-can/src/dlc.rs",
+        "crates/bsw-can/src/frame.rs"
+      ],
+      "candidate_test_roots": []
+    }
+  ]
+}

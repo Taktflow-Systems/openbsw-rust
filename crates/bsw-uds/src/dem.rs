@@ -146,9 +146,7 @@ impl<const MAX_DTCS: usize> DemManager<MAX_DTCS> {
     /// Return a reference to the entry for `dtc_code`, or `None` if the DTC
     /// is not currently stored.
     pub fn get(&self, dtc_code: u32) -> Option<&DtcEntry> {
-        self.dtcs[..self.count]
-            .iter()
-            .find(|e| e.code == dtc_code)
+        self.dtcs[..self.count].iter().find(|e| e.code == dtc_code)
     }
 
     /// Number of DTC entries currently stored.
@@ -278,10 +276,14 @@ impl<const MAX_DTCS: usize> DemManager<MAX_DTCS> {
                 data[offset + 3],
             ]);
             let status = data[offset + 4];
-            let occurrence_count =
-                u16::from_le_bytes([data[offset + 5], data[offset + 6]]);
+            let occurrence_count = u16::from_le_bytes([data[offset + 5], data[offset + 6]]);
             let aging_count = data[offset + 7];
-            self.dtcs[i] = DtcEntry { code, status, occurrence_count, aging_count };
+            self.dtcs[i] = DtcEntry {
+                code,
+                status,
+                occurrence_count,
+                aging_count,
+            };
             offset += 8;
         }
         self.count = count;
@@ -338,7 +340,11 @@ mod tests {
         assert_ne!(e.status & TEST_FAILED, 0, "TEST_FAILED must be set");
         assert_ne!(e.status & CONFIRMED_DTC, 0, "CONFIRMED_DTC must be set");
         assert_ne!(e.status & PENDING_DTC, 0, "PENDING_DTC must be set");
-        assert_ne!(e.status & TEST_FAILED_SINCE_CLEAR, 0, "TEST_FAILED_SINCE_CLEAR must be set");
+        assert_ne!(
+            e.status & TEST_FAILED_SINCE_CLEAR,
+            0,
+            "TEST_FAILED_SINCE_CLEAR must be set"
+        );
         assert_ne!(
             e.status & TEST_FAILED_THIS_OP_CYCLE,
             0,
@@ -353,14 +359,22 @@ mod tests {
         d.report_event(0xC0_7300, true);
         d.report_event(0xC0_7300, false);
         let e = d.get(0xC0_7300).unwrap();
-        assert_eq!(e.status & TEST_FAILED, 0, "TEST_FAILED must be cleared after pass");
+        assert_eq!(
+            e.status & TEST_FAILED,
+            0,
+            "TEST_FAILED must be cleared after pass"
+        );
         assert_eq!(
             e.status & TEST_FAILED_THIS_OP_CYCLE,
             0,
             "TEST_FAILED_THIS_OP_CYCLE must be cleared after pass"
         );
         // CONFIRMED_DTC must survive a single pass.
-        assert_ne!(e.status & CONFIRMED_DTC, 0, "CONFIRMED_DTC must survive a pass");
+        assert_ne!(
+            e.status & CONFIRMED_DTC,
+            0,
+            "CONFIRMED_DTC must survive a pass"
+        );
     }
 
     // ── T03: multiple distinct DTCs stored independently ─────────────────────
@@ -380,9 +394,9 @@ mod tests {
     #[test]
     fn t04_get_by_status_mask_filters_correctly() {
         let mut d = dem();
-        d.report_event(0xAA_0001, true);  // confirmed, failed
+        d.report_event(0xAA_0001, true); // confirmed, failed
         d.report_event(0xAA_0002, false); // no failure bits
-        // Filter for CONFIRMED_DTC.
+                                          // Filter for CONFIRMED_DTC.
         let confirmed: Vec<u32> = d
             .get_by_status_mask(CONFIRMED_DTC)
             .map(|e| e.code)
@@ -411,7 +425,11 @@ mod tests {
         d.set_dtc_setting(false);
         assert!(!d.dtc_setting_enabled());
         d.report_event(0xDE_AD00, true);
-        assert_eq!(d.count(), 0, "No entry must be created while DTC setting is off");
+        assert_eq!(
+            d.count(),
+            0,
+            "No entry must be created while DTC setting is off"
+        );
     }
 
     // ── T07: re-enable DTC setting works normally after disable ───────────────
@@ -514,7 +532,10 @@ mod tests {
         // Third DTC exceeds capacity.
         d.report_event(0x03_0000, true);
         assert_eq!(d.count(), 2, "capacity must not be exceeded");
-        assert!(d.get(0x03_0000).is_none(), "overflow DTC must not be stored");
+        assert!(
+            d.get(0x03_0000).is_none(),
+            "overflow DTC must not be stored"
+        );
     }
 
     // ── T14: occurrence_count saturates at u16::MAX ───────────────────────────
@@ -526,7 +547,11 @@ mod tests {
         // Manually set occurrence_count close to saturation.
         d.dtcs[0].occurrence_count = u16::MAX;
         d.report_event(0xFF_0000, true);
-        assert_eq!(d.dtcs[0].occurrence_count, u16::MAX, "must saturate at u16::MAX");
+        assert_eq!(
+            d.dtcs[0].occurrence_count,
+            u16::MAX,
+            "must saturate at u16::MAX"
+        );
     }
 
     // ── T15: clear_group removes specific DTC only ────────────────────────────

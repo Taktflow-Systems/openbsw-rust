@@ -49,6 +49,8 @@ impl<T: Copy> DoIpResult<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::format;
+
     use super::*;
     use crate::constants::NackCode;
 

@@ -1,0 +1,9 @@
+# Representative checked middleware deployment (packages E06-E08).
+model vehicle_control
+type VehicleSpeed u16
+type SetOutputRequest bool
+service VehicleControl 0x1200
+method VehicleControl GetSpeed 1 Unit VehicleSpeed
+method VehicleControl SetOutput 2 SetOutputRequest Unit
+route VehicleControl 1 2
+

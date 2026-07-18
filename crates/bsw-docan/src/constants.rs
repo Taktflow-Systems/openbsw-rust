@@ -100,7 +100,10 @@ mod tests {
     fn codec_result_equality() {
         assert_eq!(CodecResult::Ok, CodecResult::Ok);
         assert_ne!(CodecResult::Ok, CodecResult::InvalidFrameSize);
-        assert_ne!(CodecResult::InvalidMessageSize, CodecResult::InvalidFrameIndex);
+        assert_ne!(
+            CodecResult::InvalidMessageSize,
+            CodecResult::InvalidFrameIndex
+        );
     }
 
     #[test]
@@ -115,6 +118,9 @@ mod tests {
     fn protocol_message_equality() {
         assert_eq!(ProtocolMessage::None, ProtocolMessage::None);
         assert_ne!(ProtocolMessage::Timeout, ProtocolMessage::Overflow);
-        assert_ne!(ProtocolMessage::SendFailed, ProtocolMessage::AllocationFailed);
+        assert_ne!(
+            ProtocolMessage::SendFailed,
+            ProtocolMessage::AllocationFailed
+        );
     }
 }

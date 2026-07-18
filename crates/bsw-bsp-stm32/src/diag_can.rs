@@ -57,16 +57,16 @@
 //! # Usage
 //!
 //! The caller must provide a concrete `CanTransceiver` implementation that
-//! also implements [`CanReceiver`] (i.e., has a non-blocking `receive()`
+//! also implements [`bsw_can::FrameSource`] (i.e., has a non-blocking `receive()`
 //! method). Both [`BxCanTransceiver`](crate::can_bxcan::BxCanTransceiver)
 //! and [`FdCanTransceiver`](crate::can_fdcan::FdCanTransceiver) fulfil this
 //! contract.
 //!
 //! ```rust,ignore
-//! use bsw_bsp_stm32::diag_can::{DiagCanTransport, CanReceiver};
+//! use bsw_bsp_stm32::diag_can::DiagCanTransport;
 //!
 //! let mut transport = DiagCanTransport::new(
-//!     transceiver,   // impl CanTransceiver + CanReceiver
+//!     transceiver,   // impl CanTransceiver + FrameSource
 //!     0x600,         // request CAN ID (tester -> ECU)
 //!     0x601,         // response CAN ID (ECU -> tester)
 //!     &router,       // DiagRouter with registered jobs
@@ -79,11 +79,12 @@
 //! }
 //! ```
 
-use bsw_can::frame::CanFrame;
 use bsw_can::can_id::CanId;
+use bsw_can::frame::CanFrame;
+use bsw_can::listener::FrameSource;
 use bsw_can::transceiver::{CanTransceiver, TransceiverState};
 use bsw_docan::codec::{
-    self, CodecConfig, DecodedFrame, FirstFrame, SingleFrame, ConsecutiveFrame,
+    self, CodecConfig, ConsecutiveFrame, DecodedFrame, FirstFrame, SingleFrame,
 };
 use bsw_docan::constants::FlowStatus;
 use bsw_docan::rx_handler::RxProtocolHandler;
@@ -124,22 +125,6 @@ const NRC_SID: u8 = 0x7F;
 const MAX_FC_WAIT: u8 = 10;
 
 // ---------------------------------------------------------------------------
-// CanReceiver trait
-// ---------------------------------------------------------------------------
-
-/// Extension trait for non-blocking CAN frame reception.
-///
-/// The `CanTransceiver` trait in `bsw-can` covers the transmit path only
-/// (mirroring the C++ `ICanTransceiver`). Platform BSPs that provide an
-/// RX software queue must additionally implement this trait so that the
-/// diagnostic transport can poll for incoming frames.
-pub trait CanReceiver {
-    /// Returns the next received CAN frame, or `None` if the RX queue is
-    /// empty. Must be non-blocking.
-    fn receive(&mut self) -> Option<CanFrame>;
-}
-
-// ---------------------------------------------------------------------------
 // Transport RX/TX state enums
 // ---------------------------------------------------------------------------
 
@@ -169,7 +154,7 @@ enum TxPhase {
 /// CAN-based diagnostic transport — bridges hardware CAN to UDS via ISO-TP.
 ///
 /// Generic over `T` which must implement both [`CanTransceiver`] (for TX /
-/// state management) and [`CanReceiver`] (for non-blocking RX). This allows
+/// state management) and [`FrameSource`] (for non-blocking RX). This allows
 /// the same transport code to work with `BxCanTransceiver` (STM32F4) and
 /// `FdCanTransceiver` (STM32G4).
 ///
@@ -178,7 +163,7 @@ enum TxPhase {
 /// The `'a` lifetime borrows the [`DiagRouter`] and its registered
 /// [`DiagJob`](bsw_uds::diag_job::DiagJob) references. The transport must
 /// not outlive the router.
-pub struct DiagCanTransport<'a, T: CanTransceiver + CanReceiver> {
+pub struct DiagCanTransport<'a, T: CanTransceiver + FrameSource> {
     /// Hardware CAN transceiver (TX + RX).
     transceiver: T,
 
@@ -192,7 +177,6 @@ pub struct DiagCanTransport<'a, T: CanTransceiver + CanReceiver> {
     response_id: u32,
 
     // -- RX state ----------------------------------------------------------
-
     /// Current receive-side phase.
     rx_phase: RxPhase,
 
@@ -213,7 +197,6 @@ pub struct DiagCanTransport<'a, T: CanTransceiver + CanReceiver> {
     rx_seq: u8,
 
     // -- TX state ----------------------------------------------------------
-
     /// Current transmit-side phase.
     tx_phase: TxPhase,
 
@@ -233,7 +216,6 @@ pub struct DiagCanTransport<'a, T: CanTransceiver + CanReceiver> {
     tx_seq: u8,
 
     // -- UDS ---------------------------------------------------------------
-
     /// Current diagnostic session.
     session: DiagSession,
 
@@ -241,14 +223,13 @@ pub struct DiagCanTransport<'a, T: CanTransceiver + CanReceiver> {
     router: DiagRouter<'a>,
 
     // -- Timing (placeholder for future timeout enforcement) ---------------
-
     /// Timestamp (microseconds) of the last received frame.
     /// Reserved for N_Cr timeout enforcement in a future iteration.
     #[allow(dead_code)]
     last_rx_time_us: u32,
 }
 
-impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
+impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
     // -----------------------------------------------------------------------
     // Construction
     // -----------------------------------------------------------------------
@@ -259,12 +240,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     /// - `request_id`: CAN ID on which diagnostic requests arrive (e.g. 0x600).
     /// - `response_id`: CAN ID for outgoing diagnostic responses (e.g. 0x601).
     /// - `router`: the UDS [`DiagRouter`] containing all registered jobs.
-    pub fn new(
-        transceiver: T,
-        request_id: u32,
-        response_id: u32,
-        router: DiagRouter<'a>,
-    ) -> Self {
+    pub fn new(transceiver: T, request_id: u32, response_id: u32, router: DiagRouter<'a>) -> Self {
         Self {
             transceiver,
             codec_config: CodecConfig {
@@ -331,18 +307,15 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     pub fn poll(&mut self) {
         // ── Step 0: Bus-off recovery ────────────────────────────────────
         // If the FDCAN went bus-off (TEC >= 256), it enters INIT mode
-        // automatically on STM32G4. We detect this and re-open the bus.
+        // automatically on STM32G4. The driver owns restart timing.
         if self.transceiver.transceiver_state() == TransceiverState::BusOff {
-            // Re-initialize: close → init → open
-            self.transceiver.close();
-            self.transceiver.init();
-            self.transceiver.open();
+            // Abort protocol work until the driver's injected deadline fires.
             // Reset any in-progress RX/TX sessions
             self.rx_phase = RxPhase::Idle;
             self.tx_phase = TxPhase::Idle;
             self.rx_handler = None;
             self.tx_handler = None;
-            return; // skip this poll cycle, let bus stabilize
+            return; // hardware adapter restarts only at its injected deadline
         }
 
         // ── Step 1: Try to receive a CAN frame ──────────────────────────
@@ -371,9 +344,8 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     /// Processes a single received CAN frame on the request ID.
     fn handle_rx_frame(&mut self, frame: &CanFrame) {
         let data = frame.payload();
-        let decoded = match codec::decode_frame(data, &self.codec_config) {
-            Ok(d) => d,
-            Err(_) => return, // malformed frame — ignore silently
+        let Ok(decoded) = codec::decode_frame(data, &self.codec_config) else {
+            return;
         };
 
         match decoded {
@@ -406,7 +378,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     /// payload, set up RX handler, and send FC(CTS) to the tester.
     fn handle_first_frame(&mut self, ff: &FirstFrame<'_>) {
         let msg_len = ff.message_length as usize;
-        if msg_len < 8 || msg_len > MAX_MSG_LEN {
+        if !(8..=MAX_MSG_LEN).contains(&msg_len) {
             return; // invalid or too large for our buffer
         }
 
@@ -430,11 +402,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
         if let Some(ref mut handler) = self.rx_handler {
             let transition = handler.allocated(true);
             if transition.send_flow_control {
-                send_fc_cts(
-                    &mut self.transceiver,
-                    self.response_id,
-                    &self.codec_config,
-                );
+                send_fc_cts(&mut self.transceiver, self.response_id, &self.codec_config);
                 // Notify handler that FC was sent successfully.
                 handler.frame_sent(true);
             }
@@ -477,11 +445,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
 
             // If handler requests another FC (block boundary), send it.
             if transition.send_flow_control {
-                send_fc_cts(
-                    &mut self.transceiver,
-                    self.response_id,
-                    &self.codec_config,
-                );
+                send_fc_cts(&mut self.transceiver, self.response_id, &self.codec_config);
                 handler.frame_sent(true);
             }
         }
@@ -512,6 +476,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     /// Uses a 256-byte local buffer (not 4095) to avoid stack overflow
     /// on Cortex-M4. UDS responses are always < 256 bytes in practice.
     fn dispatch_and_respond(&mut self) {
+        const SERVICES_WITH_SUBFN: &[u8] = &[0x10, 0x11, 0x19, 0x27, 0x28, 0x31, 0x3E, 0x85];
         let request = &self.rx_buf[..self.rx_len];
         let mut response_buf = [0u8; 256];
 
@@ -521,11 +486,13 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
         // 0x27 (SecurityAccess), 0x28 (CommCtrl), 0x31 (RoutineCtrl),
         // 0x3E (TesterPresent), 0x85 (ControlDtcSetting).
         // NOT for 0x22 (ReadDID), 0x2E (WriteDID), 0x14 (ClearDTC).
-        const SERVICES_WITH_SUBFN: &[u8] = &[0x10, 0x11, 0x19, 0x27, 0x28, 0x31, 0x3E, 0x85];
         let has_subfn = !request.is_empty() && SERVICES_WITH_SUBFN.contains(&request[0]);
         let suppress_positive = has_subfn && request.len() >= 2 && (request[1] & 0x80) != 0;
 
-        match self.router.dispatch(request, self.session, &mut response_buf) {
+        match self
+            .router
+            .dispatch(request, self.session, &mut response_buf)
+        {
             Ok(resp_len) => {
                 if !suppress_positive {
                     self.start_tx(&response_buf[..resp_len]);
@@ -560,10 +527,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
             // ── Single Frame ────────────────────────────────────────────
             let mut buf = [self.codec_config.filler_byte; CAN_DLC];
             if codec::encode_single_frame(&mut buf, response, &self.codec_config).is_ok() {
-                let frame = CanFrame::with_data(
-                    CanId::base(self.response_id as u16),
-                    &buf,
-                );
+                let frame = CanFrame::with_data(CanId::base(self.response_id as u16), &buf);
                 let _ = self.transceiver.write(&frame);
             }
             self.tx_phase = TxPhase::Idle;
@@ -591,10 +555,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
             )
             .is_ok()
             {
-                let frame = CanFrame::with_data(
-                    CanId::base(self.response_id as u16),
-                    &buf,
-                );
+                let frame = CanFrame::with_data(CanId::base(self.response_id as u16), &buf);
                 let _ = self.transceiver.write(&frame);
             }
             self.tx_offset = ff_data_len;
@@ -605,7 +566,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
             let mut handler = TxProtocolHandler::new(total_frames, MAX_FC_WAIT);
             handler.start();
             handler.frame_sending(); // FF queued
-            handler.frames_sent();   // FF confirmed -> Wait for FC
+            handler.frames_sent(); // FF confirmed -> Wait for FC
             self.tx_handler = Some(handler);
             self.tx_phase = TxPhase::Sending;
         }
@@ -619,9 +580,8 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
         }
 
         let data = frame.payload();
-        let decoded = match codec::decode_frame(data, &self.codec_config) {
-            Ok(d) => d,
-            Err(_) => return,
+        let Ok(decoded) = codec::decode_frame(data, &self.codec_config) else {
+            return;
         };
 
         if let DecodedFrame::FlowControl(fc) = decoded {
@@ -634,13 +594,11 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
     /// Drives the TX state machine: encodes and sends the next consecutive
     /// frame if the protocol handler is in the `Send` state.
     fn drive_tx(&mut self) {
-        let handler_state = match self.tx_handler {
-            Some(ref handler) => handler.state(),
-            None => {
-                self.tx_phase = TxPhase::Idle;
-                return;
-            }
+        let Some(ref handler) = self.tx_handler else {
+            self.tx_phase = TxPhase::Idle;
+            return;
         };
+        let handler_state = handler.state();
 
         match handler_state {
             TxState::Send => {
@@ -665,10 +623,7 @@ impl<'a, T: CanTransceiver + CanReceiver> DiagCanTransport<'a, T> {
                 )
                 .is_ok()
                 {
-                    let frame = CanFrame::with_data(
-                        CanId::base(self.response_id as u16),
-                        &buf,
-                    );
+                    let frame = CanFrame::with_data(CanId::base(self.response_id as u16), &buf);
                     let _ = self.transceiver.write(&frame);
                 }
 
@@ -744,7 +699,7 @@ fn send_fc_cts<T: CanTransceiver>(
 // LifecycleComponent implementation
 // ---------------------------------------------------------------------------
 
-impl<T: CanTransceiver + CanReceiver> bsw_lifecycle::LifecycleComponent
+impl<T: CanTransceiver + FrameSource> bsw_lifecycle::LifecycleComponent
     for DiagCanTransport<'_, T>
 {
     /// Initialises the CAN transceiver hardware and opens the bus.
@@ -784,7 +739,7 @@ mod tests {
 
     // -- Mock transceiver ---------------------------------------------------
 
-    /// Minimal mock that implements both `CanTransceiver` and `CanReceiver`.
+    /// Minimal mock that implements both `CanTransceiver` and `FrameSource`.
     struct MockTransceiver {
         state: State,
         rx_queue: [Option<CanFrame>; 4],
@@ -876,7 +831,7 @@ mod tests {
         }
     }
 
-    impl CanReceiver for MockTransceiver {
+    impl FrameSource for MockTransceiver {
         fn receive(&mut self) -> Option<CanFrame> {
             if self.rx_head < self.rx_queue.len() {
                 let frame = self.rx_queue[self.rx_head].take();

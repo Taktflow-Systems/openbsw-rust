@@ -61,7 +61,9 @@ pub const fn encode_separation_time(us: u32) -> u8 {
         } else {
             // ms is ≤ 127, safe to cast
             #[allow(clippy::cast_possible_truncation)]
-            { ms as u8 }
+            {
+                ms as u8
+            }
         }
     }
 }
@@ -80,6 +82,8 @@ pub struct Parameters {
     pub wait_tx_callback_timeout_us: u32,
     /// Maximum wait for a flow control frame from the receiver (µs).
     pub wait_flow_control_timeout_us: u32,
+    /// Maximum time after STmin becomes due to submit the next CF (`N_Cs`).
+    pub wait_consecutive_send_timeout_us: u32,
     /// Maximum number of buffer allocation retries before sending WAIT FC.
     pub max_allocate_retry_count: u8,
     /// Maximum number of consecutive WAIT flow controls before aborting TX (ISO §6.7.7).
@@ -93,10 +97,11 @@ pub struct Parameters {
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            wait_allocate_timeout_us: 10_000,        // 10 ms
-            wait_rx_timeout_us: 1_000_000,           // 1 s
-            wait_tx_callback_timeout_us: 100_000,    // 100 ms
-            wait_flow_control_timeout_us: 1_000_000, // 1 s
+            wait_allocate_timeout_us: 10_000,            // 10 ms
+            wait_rx_timeout_us: 1_000_000,               // 1 s
+            wait_tx_callback_timeout_us: 100_000,        // 100 ms
+            wait_flow_control_timeout_us: 1_000_000,     // 1 s
+            wait_consecutive_send_timeout_us: 1_000_000, // 1 s
             max_allocate_retry_count: 3,
             max_flow_control_wait_count: 10,
             min_separation_time_us: 0,
@@ -206,6 +211,7 @@ mod tests {
         assert_eq!(p.wait_rx_timeout_us, 1_000_000);
         assert_eq!(p.wait_tx_callback_timeout_us, 100_000);
         assert_eq!(p.wait_flow_control_timeout_us, 1_000_000);
+        assert_eq!(p.wait_consecutive_send_timeout_us, 1_000_000);
         assert_eq!(p.max_allocate_retry_count, 3);
         assert_eq!(p.max_flow_control_wait_count, 10);
         assert_eq!(p.min_separation_time_us, 0);

@@ -1,11 +1,14 @@
 // Copyright 2024 Accenture / Taktflow Systems.
 // SPDX-License-Identifier: Apache-2.0
 
-//! E2E (End-to-End) protection — simplified AUTOSAR E2E Profile 1.
+//! Project-specific E2E (End-to-End) protection extension.
 //!
 //! Provides CRC-8 + alive-counter stamping on transmit and verification on
-//! receive.  The algorithm is a subset of AUTOSAR SWS_E2E_00323 (Profile 1)
-//! adapted for direct embedding into a CAN frame payload.
+//! receive. This wire format is an OpenBSW Rust project extension: it is
+//! **not** AUTOSAR E2E Profile 1 (or any other AUTOSAR E2E profile). In
+//! particular, it has no Data ID field or Data ID contribution to its CRC.
+//! Applications that require an AUTOSAR profile must use a separately
+//! specified and tested implementation.
 //!
 //! # Frame layout
 //!
@@ -45,6 +48,7 @@
 //! - CRC covers `data[1..len]` (everything except the CRC byte itself).
 //! - Alive counter occupies `data[1] & 0x0F` (low nibble of byte 1).
 //! - Counter wraps at 16 (modulo-16 arithmetic).
+//! - No Data ID is encoded or folded into the CRC.
 //! - `max_delta` is the maximum acceptable counter distance in the forward
 //!   direction.  A delta of 0 means the counter did not advance (repeated
 //!   or replayed message).  A delta > `max_delta` means messages were lost.
@@ -59,13 +63,13 @@ use crate::crc::{Crc8, CRC8_SAE_J1850};
 // E2eProfile
 // ---------------------------------------------------------------------------
 
-/// Configuration for the E2E protection algorithm.
+/// Configuration for the project-specific E2E protection extension.
 ///
 /// Controls which CRC variant is used, how the alive counter increments, and
 /// how many skipped messages are tolerated before declaring a loss.
 ///
 /// The `crc` field is `pub` so callers may substitute a different `Crc8`
-/// algorithm (e.g. `CRC8_H2F` for AUTOSAR-strict deployments).
+/// algorithm. Doing so does not make this layout an AUTOSAR E2E profile.
 pub struct E2eProfile {
     /// CRC-8 algorithm used for frame protection.
     ///
@@ -85,8 +89,27 @@ pub struct E2eProfile {
 impl E2eProfile {
     /// Create a profile with explicit CRC algorithm and counter parameters.
     pub const fn new(crc: Crc8, counter_increment: u8, max_delta: u8) -> Self {
-        Self { crc, counter_increment, max_delta }
+        Self {
+            crc,
+            counter_increment,
+            max_delta,
+        }
     }
+
+    /// This project extension never carries or folds a Data ID into the CRC.
+    #[must_use]
+    pub const fn uses_data_id(&self) -> bool {
+        false
+    }
+}
+
+/// Buffer-shape error returned by the non-panicking E2E entry points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum E2eError {
+    /// At least the CRC and counter bytes are required.
+    FrameTooShort,
+    /// The requested protected length exceeds the supplied buffer.
+    LengthExceedsBuffer,
 }
 
 impl Default for E2eProfile {
@@ -149,7 +172,10 @@ impl E2eProtector {
     ///
     /// The alive counter starts at 0.
     pub const fn new(profile: E2eProfile) -> Self {
-        Self { profile, tx_counter: 0 }
+        Self {
+            profile,
+            tx_counter: 0,
+        }
     }
 
     /// Stamp CRC-8 and the alive counter onto `data[0..len]`.
@@ -165,13 +191,29 @@ impl E2eProtector {
     /// Panics if `len < 2` (need at least one CRC byte and one counter byte)
     /// or `len > data.len()`.
     pub fn protect(&mut self, data: &mut [u8], len: usize) {
-        assert!(len >= 2, "E2eProtector::protect: len must be >= 2 (CRC byte + counter byte)");
+        assert!(
+            len >= 2,
+            "E2eProtector::protect: len must be >= 2 (CRC byte + counter byte)"
+        );
         assert!(
             len <= data.len(),
             "E2eProtector::protect: len {} > data.len() {}",
             len,
             data.len()
         );
+
+        self.protect_checked(data, len)
+            .expect("length was asserted before project E2E protection");
+    }
+
+    /// Non-panicking variant of [`protect`](Self::protect).
+    pub fn protect_checked(&mut self, data: &mut [u8], len: usize) -> Result<(), E2eError> {
+        if len < 2 {
+            return Err(E2eError::FrameTooShort);
+        }
+        if len > data.len() {
+            return Err(E2eError::LengthExceedsBuffer);
+        }
 
         // Write alive counter into the low nibble of byte[1].
         data[1] = (data[1] & 0xF0) | (self.tx_counter & 0x0F);
@@ -181,9 +223,8 @@ impl E2eProtector {
         data[0] = crc;
 
         // Advance counter (wraps at 16, not 256, because only 4 bits are used).
-        self.tx_counter = self.tx_counter
-            .wrapping_add(self.profile.counter_increment)
-            & 0x0F;
+        self.tx_counter = self.tx_counter.wrapping_add(self.profile.counter_increment) & 0x0F;
+        Ok(())
     }
 
     /// Returns the current alive counter value (before the next protect call).
@@ -217,7 +258,10 @@ impl E2eChecker {
     ///
     /// Initial state: no reference counter (`last_counter = None`).
     pub const fn new(profile: E2eProfile) -> Self {
-        Self { profile, last_counter: None }
+        Self {
+            profile,
+            last_counter: None,
+        }
     }
 
     /// Verify the E2E protection on a received frame payload.
@@ -247,17 +291,30 @@ impl E2eChecker {
             data.len()
         );
 
+        self.check_checked(data, len)
+            .expect("length was asserted before project E2E checking")
+    }
+
+    /// Non-panicking variant of [`check`](Self::check).
+    pub fn check_checked(&mut self, data: &[u8], len: usize) -> Result<E2eResult, E2eError> {
+        if len < 2 {
+            return Err(E2eError::FrameTooShort);
+        }
+        if len > data.len() {
+            return Err(E2eError::LengthExceedsBuffer);
+        }
+
         // --- CRC check ---
         let received_crc = data[0];
         let computed_crc = self.profile.crc.checksum(&data[1..len]);
         if received_crc != computed_crc {
-            return E2eResult::WrongCrc;
+            return Ok(E2eResult::WrongCrc);
         }
 
         // --- Counter check ---
         let received_counter = data[1] & 0x0F;
 
-        match self.last_counter {
+        Ok(match self.last_counter {
             None => {
                 // First reception — accept unconditionally (CRC already passed).
                 self.last_counter = Some(received_counter);
@@ -279,7 +336,7 @@ impl E2eChecker {
                     E2eResult::Ok
                 }
             }
-        }
+        })
     }
 
     /// Returns the last accepted counter value, or `None` before the first
@@ -517,11 +574,11 @@ mod tests {
         let mut c = make_checker();
         assert_eq!(c.last_counter(), None);
 
-        p.protect(&mut buf, 8);  // counter=0 stamped
+        p.protect(&mut buf, 8); // counter=0 stamped
         c.check(&buf, 8);
         assert_eq!(c.last_counter(), Some(0));
 
-        p.protect(&mut buf, 8);  // counter=1 stamped
+        p.protect(&mut buf, 8); // counter=1 stamped
         c.check(&buf, 8);
         assert_eq!(c.last_counter(), Some(1));
     }
@@ -559,5 +616,42 @@ mod tests {
         assert_eq!(c.check(&buf, 8), E2eResult::WrongCounter);
         // Reference must remain at 0.
         assert_eq!(c.last_counter(), Some(0));
+    }
+
+    #[test]
+    fn project_extension_golden_vectors_and_data_id_exclusion() {
+        let profile = E2eProfile::default();
+        assert!(!profile.uses_data_id());
+        let mut protector = E2eProtector::new(profile);
+        let mut frame = [0, 0xA0, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+
+        protector.protect(&mut frame, 8);
+        assert_eq!(frame, [0x15, 0xA0, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+
+        protector.protect(&mut frame, 8);
+        assert_eq!(frame, [0x48, 0xA1, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
+    }
+
+    #[test]
+    fn checked_entry_points_reject_invalid_lengths_without_panicking() {
+        let mut protector = make_protector();
+        let mut checker = make_checker();
+        let mut frame = [0u8; 2];
+        assert_eq!(
+            protector.protect_checked(&mut frame, 1),
+            Err(E2eError::FrameTooShort)
+        );
+        assert_eq!(
+            protector.protect_checked(&mut frame, 3),
+            Err(E2eError::LengthExceedsBuffer)
+        );
+        assert_eq!(
+            checker.check_checked(&frame, 1),
+            Err(E2eError::FrameTooShort)
+        );
+        assert_eq!(
+            checker.check_checked(&frame, 3),
+            Err(E2eError::LengthExceedsBuffer)
+        );
     }
 }

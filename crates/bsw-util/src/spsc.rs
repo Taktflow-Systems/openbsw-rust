@@ -65,9 +65,8 @@ impl<T, const N: usize> Queue<T, N> {
         // without requiring `T: Copy` or allocating on the heap.
         // `UnsafeCell` is `repr(transparent)` so the bit-pattern of an
         // uninitialised `MaybeUninit<T>` is a valid `UnsafeCell<MaybeUninit<T>>`.
-        let buffer = unsafe {
-            MaybeUninit::<[UnsafeCell<MaybeUninit<T>>; N]>::uninit().assume_init()
-        };
+        let buffer =
+            unsafe { MaybeUninit::<[UnsafeCell<MaybeUninit<T>>; N]>::uninit().assume_init() };
 
         Self {
             buffer,

@@ -88,9 +88,18 @@ mod tests {
 
     #[test]
     fn from_byte_valid() {
-        assert_eq!(ServiceId::from_byte(0x10), Some(ServiceId::DiagnosticSessionControl));
-        assert_eq!(ServiceId::from_byte(0x22), Some(ServiceId::ReadDataByIdentifier));
-        assert_eq!(ServiceId::from_byte(0x7F), Some(ServiceId::NegativeResponse));
+        assert_eq!(
+            ServiceId::from_byte(0x10),
+            Some(ServiceId::DiagnosticSessionControl)
+        );
+        assert_eq!(
+            ServiceId::from_byte(0x22),
+            Some(ServiceId::ReadDataByIdentifier)
+        );
+        assert_eq!(
+            ServiceId::from_byte(0x7F),
+            Some(ServiceId::NegativeResponse)
+        );
         assert_eq!(ServiceId::from_byte(0x3E), Some(ServiceId::TesterPresent));
     }
 
@@ -104,7 +113,10 @@ mod tests {
 
     #[test]
     fn positive_response_ids() {
-        assert_eq!(ServiceId::DiagnosticSessionControl.positive_response_id(), 0x50);
+        assert_eq!(
+            ServiceId::DiagnosticSessionControl.positive_response_id(),
+            0x50
+        );
         assert_eq!(ServiceId::EcuReset.positive_response_id(), 0x51);
         assert_eq!(ServiceId::TesterPresent.positive_response_id(), 0x7E);
         assert_eq!(ServiceId::ReadDataByIdentifier.positive_response_id(), 0x62);
@@ -151,7 +163,13 @@ mod tests {
         // Check all bytes are distinct.
         for i in 0..all.len() {
             for j in (i + 1)..all.len() {
-                assert_ne!(all[i].as_byte(), all[j].as_byte(), "{:?} and {:?} share byte", all[i], all[j]);
+                assert_ne!(
+                    all[i].as_byte(),
+                    all[j].as_byte(),
+                    "{:?} and {:?} share byte",
+                    all[i],
+                    all[j]
+                );
             }
         }
     }

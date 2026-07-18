@@ -18,7 +18,9 @@
 pub mod adapters;
 pub mod memory_queue;
 pub mod traits;
+pub mod variant_queue;
 
 pub use adapters::{BufferedWriter, ForwardingReader, JoinReader, SplitWriter};
-pub use memory_queue::MemoryQueue;
+pub use memory_queue::{MemoryQueue, QueueReader, QueueWriter};
 pub use traits::{Reader, Writer};
+pub use variant_queue::{peek_frame, write_frame, VariantFrame, VariantMessage, VariantWriteError};

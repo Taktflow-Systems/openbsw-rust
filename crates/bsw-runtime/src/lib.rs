@@ -8,7 +8,13 @@
 // ── RuntimeStatistics ────────────────────────────────────────────────────────
 
 /// Tracks min/max/average for a series of duration measurements.
-#[derive(Debug, Clone)]
+///
+/// Semantics mirror upstream `runtime::RuntimeStatistics`: an empty tracker
+/// reports zero for every value, and the first measurement initializes both
+/// minimum and maximum. Totals saturate instead of wrapping — the upstream
+/// `uint32_t` counters wrap silently, which is recorded as an intentional
+/// native difference in the parity manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeStatistics {
     count: u64,
     total: u64,
@@ -29,21 +35,26 @@ impl RuntimeStatistics {
         Self {
             count: 0,
             total: 0,
-            min: u64::MAX,
+            min: 0,
             max: 0,
         }
     }
 
     /// Record a new measurement.
     pub fn record(&mut self, value: u64) {
-        self.count += 1;
-        self.total += value;
-        if value < self.min {
+        self.total = self.total.saturating_add(value);
+        if self.count == 0 {
             self.min = value;
-        }
-        if value > self.max {
             self.max = value;
+        } else {
+            if value < self.min {
+                self.min = value;
+            }
+            if value > self.max {
+                self.max = value;
+            }
         }
+        self.count = self.count.saturating_add(1);
     }
 
     /// Number of recorded measurements.
@@ -52,7 +63,7 @@ impl RuntimeStatistics {
         self.count
     }
 
-    /// Minimum recorded value (`u64::MAX` if no measurements have been taken).
+    /// Minimum recorded value (0 if no measurements have been taken).
     #[must_use]
     pub const fn min(&self) -> u64 {
         self.min
@@ -84,17 +95,29 @@ impl RuntimeStatistics {
     pub fn reset(&mut self) {
         *self = Self::new();
     }
+
+    /// Return a snapshot of the current values and reset this tracker.
+    ///
+    /// This is the deterministic reporting cycle used by monitors: the
+    /// returned copy is stable while new measurements start from zero.
+    #[must_use]
+    pub fn take(&mut self) -> Self {
+        core::mem::take(self)
+    }
 }
 
 // ── FunctionRuntimeStatistics ─────────────────────────────────────────────────
 
-/// Extended statistics that also track jitter (variation between consecutive
-/// measurements).
-#[derive(Debug, Clone)]
+/// Extended statistics that also track jitter.
+///
+/// Jitter follows upstream `runtime::FunctionRuntimeStatistics`: it is the
+/// interval between the start timestamps of consecutive runs, recorded from
+/// the second run onward, not the variation of the runtimes themselves.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionRuntimeStatistics {
     runtime: RuntimeStatistics,
     jitter: RuntimeStatistics,
-    last_value: Option<u64>,
+    prev_start: Option<u64>,
 }
 
 impl Default for FunctionRuntimeStatistics {
@@ -110,18 +133,19 @@ impl FunctionRuntimeStatistics {
         Self {
             runtime: RuntimeStatistics::new(),
             jitter: RuntimeStatistics::new(),
-            last_value: None,
+            prev_start: None,
         }
     }
 
-    /// Record a new measurement. Also computes jitter (absolute difference
-    /// from the previous measurement) when a previous value exists.
-    pub fn record(&mut self, value: u64) {
-        if let Some(prev) = self.last_value {
-            self.jitter.record(value.abs_diff(prev));
+    /// Record one run that started at `start_timestamp` ticks and consumed
+    /// `runtime` ticks. Jitter is the wrapping interval between consecutive
+    /// start timestamps.
+    pub fn record(&mut self, start_timestamp: u64, runtime: u64) {
+        if let Some(prev) = self.prev_start {
+            self.jitter.record(start_timestamp.wrapping_sub(prev));
         }
-        self.last_value = Some(value);
-        self.runtime.record(value);
+        self.prev_start = Some(start_timestamp);
+        self.runtime.record(runtime);
     }
 
     /// Access the runtime statistics.
@@ -136,11 +160,30 @@ impl FunctionRuntimeStatistics {
         &self.jitter
     }
 
-    /// Reset both runtime and jitter statistics, including the last-seen value.
+    /// Minimum start-interval jitter; upstream `getMinJitter`.
+    #[must_use]
+    pub const fn min_jitter(&self) -> u64 {
+        self.jitter.min()
+    }
+
+    /// Maximum start-interval jitter; upstream `getMaxJitter`.
+    #[must_use]
+    pub const fn max_jitter(&self) -> u64 {
+        self.jitter.max()
+    }
+
+    /// Reset both runtime and jitter statistics, including the last start
+    /// timestamp.
     pub fn reset(&mut self) {
         self.runtime.reset();
         self.jitter.reset();
-        self.last_value = None;
+        self.prev_start = None;
+    }
+
+    /// Return a snapshot of the current values and reset this tracker.
+    #[must_use]
+    pub fn take(&mut self) -> Self {
+        core::mem::take(self)
     }
 }
 
@@ -285,9 +328,7 @@ impl<const MAX_DEPTH: usize> RuntimeStack<MAX_DEPTH> {
         if self.depth == 0 {
             return None;
         }
-        self.entries[self.depth - 1]
-            .as_ref()
-            .map(|e| e.context)
+        self.entries[self.depth - 1].as_ref().map(|e| e.context)
     }
 }
 
@@ -329,7 +370,7 @@ impl ExecutionMonitor {
         if let Some(enter) = self.enter_tick.take() {
             let elapsed = current_tick.saturating_sub(enter);
             let net = elapsed.saturating_sub(suspended_ticks);
-            self.stats.record(net);
+            self.stats.record(enter, net);
         }
     }
 
@@ -417,11 +458,9 @@ impl<const N: usize> StatisticsContainer<N> {
     /// Returns `None` if no entry with the given name exists.
     #[must_use]
     pub fn find(&self, name: &str) -> Option<&RuntimeStatistics> {
-        self.entries[..self.count].iter().find_map(|slot| {
-            slot.as_ref()
-                .filter(|(n, _)| *n == name)
-                .map(|(_, s)| s)
-        })
+        self.entries[..self.count]
+            .iter()
+            .find_map(|slot| slot.as_ref().filter(|(n, _)| *n == name).map(|(_, s)| s))
     }
 
     /// Number of entries currently stored.
@@ -446,6 +485,122 @@ impl<const N: usize> StatisticsContainer<N> {
             }
         }
     }
+
+    /// Copy names and statistics from `src`, mirroring upstream
+    /// `StatisticsContainer::copyFrom` / `SharedStatisticsContainer`.
+    pub fn copy_from(&mut self, src: &Self) {
+        self.entries.clone_from(&src.entries);
+        self.count = src.count;
+    }
+
+    /// Snapshot `src` into this container and reset `src` for the next
+    /// measurement window.
+    pub fn take_from(&mut self, src: &mut Self) {
+        self.copy_from(src);
+        src.reset_all();
+    }
+}
+
+// ── FunctionStatisticsContainer ───────────────────────────────────────────────
+
+/// Fixed-capacity container for named [`FunctionRuntimeStatistics`] entries.
+///
+/// This is the task/function monitoring companion of
+/// [`StatisticsContainer`]: each entry additionally tracks start-interval
+/// jitter, matching upstream containers instantiated with
+/// `FunctionRuntimeStatistics`.
+pub struct FunctionStatisticsContainer<const N: usize> {
+    entries: [Option<(&'static str, FunctionRuntimeStatistics)>; N],
+    count: usize,
+}
+
+impl<const N: usize> Default for FunctionStatisticsContainer<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize> FunctionStatisticsContainer<N> {
+    /// Create an empty container.
+    #[must_use]
+    pub const fn new() -> Self {
+        const NONE: Option<(&'static str, FunctionRuntimeStatistics)> = None;
+        Self {
+            entries: [NONE; N],
+            count: 0,
+        }
+    }
+
+    /// Add a named entry. Returns its index, or `None` when full.
+    pub fn add(&mut self, name: &'static str) -> Option<usize> {
+        if self.count >= N {
+            return None;
+        }
+        let idx = self.count;
+        self.entries[idx] = Some((name, FunctionRuntimeStatistics::new()));
+        self.count += 1;
+        Some(idx)
+    }
+
+    /// Record one run for the entry at `index`.
+    ///
+    /// Does nothing if `index` is out of range or the slot is empty.
+    pub fn record(&mut self, index: usize, start_timestamp: u64, runtime: u64) {
+        if let Some(Some((_, stats))) = self.entries.get_mut(index) {
+            stats.record(start_timestamp, runtime);
+        }
+    }
+
+    /// Get statistics by index.
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<(&str, &FunctionRuntimeStatistics)> {
+        self.entries
+            .get(index)?
+            .as_ref()
+            .map(|(name, stats)| (*name, stats))
+    }
+
+    /// Find statistics by name (linear scan).
+    #[must_use]
+    pub fn find(&self, name: &str) -> Option<&FunctionRuntimeStatistics> {
+        self.entries[..self.count]
+            .iter()
+            .find_map(|slot| slot.as_ref().filter(|(n, _)| *n == name).map(|(_, s)| s))
+    }
+
+    /// Number of entries currently stored.
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Iterate over all entries as `(&str, &FunctionRuntimeStatistics)`.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &FunctionRuntimeStatistics)> {
+        self.entries[..self.count]
+            .iter()
+            .filter_map(|slot| slot.as_ref().map(|(n, s)| (*n, s)))
+    }
+
+    /// Reset all entries; names are retained.
+    pub fn reset_all(&mut self) {
+        for slot in &mut self.entries[..self.count] {
+            if let Some((_, stats)) = slot.as_mut() {
+                stats.reset();
+            }
+        }
+    }
+
+    /// Copy names and statistics from `src`.
+    pub fn copy_from(&mut self, src: &Self) {
+        self.entries.clone_from(&src.entries);
+        self.count = src.count;
+    }
+
+    /// Snapshot `src` into this container and reset `src`.
+    pub fn take_from(&mut self, src: &mut Self) {
+        self.copy_from(src);
+        src.reset_all();
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -460,10 +615,99 @@ mod tests {
     fn runtime_stats_new_initial_state() {
         let s = RuntimeStatistics::new();
         assert_eq!(s.count(), 0);
-        assert_eq!(s.min(), u64::MAX);
+        assert_eq!(s.min(), 0);
         assert_eq!(s.max(), 0);
         assert_eq!(s.average(), 0);
         assert_eq!(s.total(), 0);
+    }
+
+    /// Port of upstream `RuntimeStatisticsTest.testAddRun`
+    /// (`libs/bsw/runtime/test/src/RuntimeStatisticsTest.cpp`).
+    #[test]
+    fn upstream_runtime_statistics_add_run_vectors() {
+        let mut s = RuntimeStatistics::new();
+        s.record(15);
+        assert_eq!(
+            (s.total(), s.count(), s.min(), s.max(), s.average()),
+            (15, 1, 15, 15, 15)
+        );
+        s.record(30);
+        assert_eq!(
+            (s.total(), s.count(), s.min(), s.max(), s.average()),
+            (45, 2, 15, 30, 22)
+        );
+        s.record(10);
+        assert_eq!(
+            (s.total(), s.count(), s.min(), s.max(), s.average()),
+            (55, 3, 10, 30, 18)
+        );
+        s.record(20);
+        assert_eq!(
+            (s.total(), s.count(), s.min(), s.max(), s.average()),
+            (75, 4, 10, 30, 18)
+        );
+    }
+
+    /// Port of upstream `RuntimeStatisticsTest.testReset`.
+    #[test]
+    fn upstream_runtime_statistics_reset_vectors() {
+        let mut s = RuntimeStatistics::new();
+        s.record(15);
+        s.reset();
+        assert_eq!(
+            (s.total(), s.count(), s.min(), s.max(), s.average()),
+            (0, 0, 0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn runtime_stats_total_and_count_saturate_instead_of_wrapping() {
+        let mut s = RuntimeStatistics::new();
+        s.record(u64::MAX);
+        s.record(1);
+        assert_eq!(s.total(), u64::MAX);
+        assert_eq!(s.count(), 2);
+        assert_eq!(s.min(), 1);
+        assert_eq!(s.max(), u64::MAX);
+    }
+
+    #[test]
+    fn runtime_stats_take_returns_snapshot_and_resets() {
+        let mut s = RuntimeStatistics::new();
+        s.record(10);
+        s.record(20);
+        let snapshot = s.take();
+        assert_eq!(snapshot.count(), 2);
+        assert_eq!(snapshot.total(), 30);
+        assert_eq!(s.count(), 0);
+        assert_eq!(s.total(), 0);
+    }
+
+    /// Property-style sweep: for any pseudo-random sequence the invariants
+    /// `min <= average <= max`, `count`, and `total` hold exactly.
+    #[test]
+    fn runtime_stats_random_sequence_invariants() {
+        let mut seed: u64 = 0x2545_F491_4F6C_DD1D;
+        for _ in 0..64 {
+            let mut s = RuntimeStatistics::new();
+            let mut expected_total: u64 = 0;
+            let mut expected_min = u64::MAX;
+            let mut expected_max = 0;
+            let samples = 1 + (seed % 100);
+            for _ in 0..samples {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let value = seed >> 33;
+                s.record(value);
+                expected_total += value;
+                expected_min = expected_min.min(value);
+                expected_max = expected_max.max(value);
+            }
+            assert_eq!(s.count(), samples);
+            assert_eq!(s.total(), expected_total);
+            assert_eq!(s.min(), expected_min);
+            assert_eq!(s.max(), expected_max);
+            assert!(s.min() <= s.average() && s.average() <= s.max());
+        }
     }
 
     #[test]
@@ -514,7 +758,7 @@ mod tests {
         s.reset();
         assert_eq!(s.count(), 0);
         assert_eq!(s.total(), 0);
-        assert_eq!(s.min(), u64::MAX);
+        assert_eq!(s.min(), 0);
         assert_eq!(s.max(), 0);
         assert_eq!(s.average(), 0);
     }
@@ -535,49 +779,84 @@ mod tests {
         let f = FunctionRuntimeStatistics::new();
         assert_eq!(f.jitter().count(), 0);
         assert_eq!(f.runtime().count(), 0);
+        assert_eq!(f.min_jitter(), 0);
+        assert_eq!(f.max_jitter(), 0);
     }
 
     #[test]
     fn func_stats_first_record_no_jitter() {
         let mut f = FunctionRuntimeStatistics::new();
-        f.record(100);
+        f.record(25, 100);
         assert_eq!(f.runtime().count(), 1);
         assert_eq!(f.jitter().count(), 0, "no jitter on first measurement");
     }
 
+    /// Port of upstream `FunctionRuntimeStatisticsTest.testAddRun`
+    /// (`libs/bsw/runtime/test/src/FunctionRuntimeStatisticsTest.cpp`):
+    /// jitter is the interval between consecutive start timestamps.
     #[test]
-    fn func_stats_second_record_jitter_equals_abs_diff() {
+    fn upstream_function_runtime_statistics_add_run_vectors() {
         let mut f = FunctionRuntimeStatistics::new();
-        f.record(100);
-        f.record(150);
-        assert_eq!(f.jitter().count(), 1);
-        assert_eq!(f.jitter().min(), 50);
-        assert_eq!(f.jitter().max(), 50);
+        f.record(25, 15);
+        assert_eq!(f.runtime().total(), 15);
+        assert_eq!(f.runtime().count(), 1);
+        assert_eq!((f.min_jitter(), f.max_jitter()), (0, 0));
+        f.record(45, 30);
+        assert_eq!(f.runtime().total(), 45);
+        assert_eq!(f.runtime().average(), 22);
+        assert_eq!((f.min_jitter(), f.max_jitter()), (20, 20));
+        f.record(85, 10);
+        assert_eq!(f.runtime().total(), 55);
+        assert_eq!(f.runtime().average(), 18);
+        assert_eq!((f.min_jitter(), f.max_jitter()), (20, 40));
+        f.record(100, 20);
+        assert_eq!(f.runtime().total(), 75);
+        assert_eq!(f.runtime().count(), 4);
+        assert_eq!(
+            (f.runtime().min(), f.runtime().max(), f.runtime().average()),
+            (10, 30, 18)
+        );
+        assert_eq!((f.min_jitter(), f.max_jitter()), (15, 40));
     }
 
-    #[test]
-    fn func_stats_multiple_records_track_jitter_min_max() {
-        let mut f = FunctionRuntimeStatistics::new();
-        f.record(100); // no jitter
-        f.record(110); // jitter 10
-        f.record(105); // jitter 5
-        f.record(120); // jitter 15
-        assert_eq!(f.jitter().min(), 5);
-        assert_eq!(f.jitter().max(), 15);
-        assert_eq!(f.jitter().count(), 3);
-    }
-
+    /// Port of upstream `FunctionRuntimeStatisticsTest.testReset`.
     #[test]
     fn func_stats_reset_clears_all() {
         let mut f = FunctionRuntimeStatistics::new();
-        f.record(50);
-        f.record(80);
+        f.record(20, 14);
+        f.record(45, 16);
+        assert_eq!(f.runtime().total(), 30);
+        assert_eq!(f.runtime().average(), 15);
+        assert_eq!((f.min_jitter(), f.max_jitter()), (25, 25));
         f.reset();
         assert_eq!(f.runtime().count(), 0);
         assert_eq!(f.jitter().count(), 0);
+        assert_eq!((f.min_jitter(), f.max_jitter()), (0, 0));
         // After reset, first record should again produce no jitter.
-        f.record(200);
+        f.record(200, 10);
         assert_eq!(f.jitter().count(), 0);
+    }
+
+    #[test]
+    fn func_stats_jitter_handles_timestamp_wraparound() {
+        let mut f = FunctionRuntimeStatistics::new();
+        f.record(u64::MAX - 4, 1);
+        f.record(5, 1);
+        assert_eq!(f.jitter().count(), 1);
+        assert_eq!(f.min_jitter(), 10);
+    }
+
+    #[test]
+    fn func_stats_take_returns_snapshot_and_resets() {
+        let mut f = FunctionRuntimeStatistics::new();
+        f.record(0, 5);
+        f.record(10, 7);
+        let snapshot = f.take();
+        assert_eq!(snapshot.runtime().count(), 2);
+        assert_eq!(snapshot.min_jitter(), 10);
+        assert_eq!(f.runtime().count(), 0);
+        f.record(50, 1);
+        assert_eq!(f.jitter().count(), 0, "prev start cleared by take()");
     }
 
     // ── RuntimeStack ─────────────────────────────────────────────────────────
@@ -786,5 +1065,70 @@ mod tests {
             assert_eq!(name, names[i]);
         }
         assert_eq!(c.iter().count(), 3);
+    }
+
+    #[test]
+    fn container_copy_from_mirrors_names_and_values() {
+        let mut src = StatisticsContainer::<4>::new();
+        let idx = src.add("task_a").unwrap();
+        src.record(idx, 42);
+        let mut dst = StatisticsContainer::<4>::new();
+        dst.copy_from(&src);
+        let (name, stats) = dst.get(idx).unwrap();
+        assert_eq!(name, "task_a");
+        assert_eq!(stats.max(), 42);
+        // Source keeps its values after a plain copy.
+        assert_eq!(src.get(idx).unwrap().1.count(), 1);
+    }
+
+    #[test]
+    fn container_take_from_snapshots_and_resets_source() {
+        let mut src = StatisticsContainer::<4>::new();
+        let idx = src.add("task_a").unwrap();
+        src.record(idx, 7);
+        let mut dst = StatisticsContainer::<4>::new();
+        dst.take_from(&mut src);
+        assert_eq!(dst.get(idx).unwrap().1.count(), 1);
+        assert_eq!(src.get(idx).unwrap().1.count(), 0);
+        assert_eq!(src.get(idx).unwrap().0, "task_a", "names survive reset");
+    }
+
+    // ── FunctionStatisticsContainer ──────────────────────────────────────────
+
+    #[test]
+    fn function_container_records_runtime_and_jitter() {
+        let mut c = FunctionStatisticsContainer::<4>::new();
+        let idx = c.add("cycle").unwrap();
+        c.record(idx, 100, 10);
+        c.record(idx, 150, 12);
+        let (name, stats) = c.get(idx).unwrap();
+        assert_eq!(name, "cycle");
+        assert_eq!(stats.runtime().count(), 2);
+        assert_eq!((stats.min_jitter(), stats.max_jitter()), (50, 50));
+        assert_eq!(c.find("cycle").unwrap().runtime().max(), 12);
+        assert!(c.find("absent").is_none());
+    }
+
+    #[test]
+    fn function_container_capacity_reset_and_snapshot() {
+        let mut c = FunctionStatisticsContainer::<1>::new();
+        assert_eq!(c.add("only"), Some(0));
+        assert_eq!(c.add("overflow"), None);
+        c.record(0, 5, 9);
+        let mut snapshot = FunctionStatisticsContainer::<1>::new();
+        snapshot.take_from(&mut c);
+        assert_eq!(snapshot.get(0).unwrap().1.runtime().total(), 9);
+        assert_eq!(c.get(0).unwrap().1.runtime().count(), 0);
+        assert_eq!(c.count(), 1);
+        c.reset_all();
+        assert_eq!(c.iter().count(), 1);
+    }
+
+    #[test]
+    fn function_container_ignores_out_of_range_records() {
+        let mut c = FunctionStatisticsContainer::<2>::new();
+        c.add("a").unwrap();
+        c.record(5, 0, 1);
+        assert_eq!(c.get(0).unwrap().1.runtime().count(), 0);
     }
 }

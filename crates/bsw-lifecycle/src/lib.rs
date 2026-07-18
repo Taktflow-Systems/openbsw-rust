@@ -72,6 +72,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod runlevel;
+
 // ---------------------------------------------------------------------------
 // TransitionType
 // ---------------------------------------------------------------------------
@@ -393,8 +395,7 @@ impl<const N: usize> LifecycleManager<N> {
                         self.states[i] = ComponentState::Initialized;
                     }
                     TransitionResult::Pending => {
-                        self.states[i] =
-                            ComponentState::Transitioning(TransitionType::Init);
+                        self.states[i] = ComponentState::Transitioning(TransitionType::Init);
                         pending += 1;
                     }
                     TransitionResult::Error => {
@@ -427,8 +428,7 @@ impl<const N: usize> LifecycleManager<N> {
                         self.states[i] = ComponentState::Running;
                     }
                     TransitionResult::Pending => {
-                        self.states[i] =
-                            ComponentState::Transitioning(TransitionType::Run);
+                        self.states[i] = ComponentState::Transitioning(TransitionType::Run);
                         pending += 1;
                     }
                     TransitionResult::Error => {
@@ -463,8 +463,7 @@ impl<const N: usize> LifecycleManager<N> {
                         self.states[i] = ComponentState::ShutDown;
                     }
                     TransitionResult::Pending => {
-                        self.states[i] =
-                            ComponentState::Transitioning(TransitionType::Shutdown);
+                        self.states[i] = ComponentState::Transitioning(TransitionType::Shutdown);
                         pending += 1;
                     }
                     TransitionResult::Error => {

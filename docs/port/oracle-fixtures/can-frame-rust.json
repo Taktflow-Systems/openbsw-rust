@@ -1,0 +1,17 @@
+{
+  "protocol_version": 1,
+  "scenario": "can-frame-smoke",
+  "compare_logs": false,
+  "records": [
+    {
+      "sequence": 0,
+      "kind": "can_id_classification",
+      "source": "rust-bootstrap-contract",
+      "timestamp_ns": 900,
+      "input": {"id": 291, "extended": false, "payload_hex": "deadbeef"},
+      "output": {"raw_id": 291, "extended": false, "payload_length": 4},
+      "state": "accepted",
+      "logs": []
+    }
+  ]
+}

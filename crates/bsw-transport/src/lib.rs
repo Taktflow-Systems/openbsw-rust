@@ -13,6 +13,11 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod async_layer;
+pub mod pool;
+pub mod routing;
+pub mod simple_router;
+
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -38,6 +43,7 @@ pub struct BufferOverflow;
 /// # Invariant
 ///
 /// `payload_len <= N` at all times.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportMessage<const N: usize> {
     buffer: [u8; N],
     payload_len: usize,
@@ -124,6 +130,11 @@ impl<const N: usize> TransportMessage<N> {
     #[inline]
     pub fn payload_mut(&mut self) -> &mut [u8] {
         &mut self.buffer[..self.payload_len]
+    }
+
+    /// Return the full backing buffer for incremental receive assembly.
+    pub fn storage_mut(&mut self) -> &mut [u8; N] {
+        &mut self.buffer
     }
 
     /// Returns the number of bytes currently in the payload.

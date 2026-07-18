@@ -28,6 +28,15 @@
 //! boundary.  The reader recognises the zero-length marker and skips past it
 //! symmetrically.
 //!
+//! Intentional difference from upstream `io::MemoryQueue`: upstream wraps
+//! *eagerly* at commit time whenever less than `MAX_ELEMENT_SIZE + 2`
+//! contiguous bytes remain before the buffer end, permanently skipping that
+//! tail for the current lap. This port wraps *lazily*, only when an actual
+//! allocation does not fit, so small messages keep using the tail. The
+//! public allocate/commit/peek/release contract is identical; only the
+//! exact point at which a filling queue reports "full" differs (this port
+//! never reports full earlier than upstream would).
+//!
 //! # Usage
 //!
 //! ```rust
@@ -47,8 +56,10 @@
 //! }
 //! ```
 
-use core::cell::UnsafeCell;
+use core::cell::{Cell, UnsafeCell};
 use core::sync::atomic::{AtomicUsize, Ordering};
+
+use crate::traits::{Reader, Writer};
 
 // ── MemoryQueue ──────────────────────────────────────────────────────────────
 
@@ -88,9 +99,7 @@ unsafe impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize> Sync
 {
 }
 
-impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
-    MemoryQueue<CAPACITY, MAX_ELEMENT_SIZE>
-{
+impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize> MemoryQueue<CAPACITY, MAX_ELEMENT_SIZE> {
     /// Create a new, empty `MemoryQueue`.
     ///
     /// Compile-time invariants:
@@ -141,9 +150,9 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
             },
             QueueReader {
                 queue: self,
-                read_pos,
-                has_peeked: false,
-                peek_total_size: 0,
+                read_pos: Cell::new(read_pos),
+                has_peeked: Cell::new(false),
+                peek_total_size: Cell::new(0),
             },
         )
     }
@@ -201,6 +210,10 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
     /// - `size == 0` or `size > MAX_ELEMENT_SIZE`, or
     /// - there is not enough contiguous free space.
     pub fn allocate(&mut self, size: usize) -> Option<&mut [u8]> {
+        // Any allocate call — successful or not — cancels a pending
+        // allocation, exactly like upstream: a failed re-allocation must
+        // not let commit() publish the previously staged bytes.
+        self.allocated_size = 0;
         if size == 0 || size > MAX_ELEMENT_SIZE {
             return None;
         }
@@ -237,8 +250,7 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
             // After wrapping, the logical write cursor advances by
             // `contiguous_to_end` to reach the next CAPACITY boundary
             // (physical 0).
-            let wrapped_write_pos =
-                advance_logical(self.write_pos, contiguous_to_end, CAPACITY);
+            let wrapped_write_pos = advance_logical(self.write_pos, contiguous_to_end, CAPACITY);
             let used_after_wrap = logical_distance(received, wrapped_write_pos, CAPACITY);
             let available_after_wrap = CAPACITY.saturating_sub(used_after_wrap);
 
@@ -329,11 +341,15 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
 pub struct QueueReader<'a, const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize> {
     queue: &'a MemoryQueue<CAPACITY, MAX_ELEMENT_SIZE>,
     /// Cached logical read position (only reader modifies `received`).
-    read_pos: usize,
+    ///
+    /// Interior mutability lets the [`Reader`] trait's `&self` peek skip
+    /// wrap markers; the `Cell`s make this handle `!Sync`, which is exactly
+    /// the single-consumer contract.
+    read_pos: Cell<usize>,
     /// Whether a message is currently peeked (pending release).
-    has_peeked: bool,
+    has_peeked: Cell<bool>,
     /// Total bytes to advance on `release` (2-byte header + payload).
-    peek_total_size: usize,
+    peek_total_size: Cell<usize>,
 }
 
 impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
@@ -344,7 +360,7 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
     pub fn is_empty(&self) -> bool {
         // Acquire: see the latest `sent` published by the producer.
         let sent = self.queue.sent.load(Ordering::Acquire);
-        self.read_pos == sent
+        self.read_pos.get() == sent
     }
 
     /// Peek at the next available message without consuming it.
@@ -353,10 +369,14 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
     /// `None` if the queue is empty.  Repeated calls without an intervening
     /// [`release`](Self::release) return the same slice.
     pub fn peek(&mut self) -> Option<&[u8]> {
+        self.peek_inner()
+    }
+
+    fn peek_inner(&self) -> Option<&[u8]> {
         // Return the cached view if we already hold a peeked message.
-        if self.has_peeked {
-            let phys_pos = self.read_pos % CAPACITY;
-            let size = self.peek_total_size - 2;
+        if self.has_peeked.get() {
+            let phys_pos = self.read_pos.get() % CAPACITY;
+            let size = self.peek_total_size.get() - 2;
             // SAFETY: Same invariants as the initial peek below — established
             // when `has_peeked` was set to `true`.
             let buf = unsafe { &*self.queue.data.get() };
@@ -367,11 +387,11 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
         let sent = self.queue.sent.load(Ordering::Acquire);
 
         loop {
-            if self.read_pos == sent {
+            if self.read_pos.get() == sent {
                 return None; // queue is empty
             }
 
-            let phys_pos = self.read_pos % CAPACITY;
+            let phys_pos = self.read_pos.get() % CAPACITY;
 
             // Read the 2-byte big-endian length header.
             // SAFETY: `phys_pos < CAPACITY`.  `phys_pos + 2 <= CAPACITY` holds
@@ -388,13 +408,17 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
             if size == 0 {
                 // Zero-length wrap marker: skip to the next buffer boundary.
                 let remaining_to_end = CAPACITY - phys_pos;
-                self.read_pos = advance_logical(self.read_pos, remaining_to_end, CAPACITY);
+                self.read_pos.set(advance_logical(
+                    self.read_pos.get(),
+                    remaining_to_end,
+                    CAPACITY,
+                ));
                 continue;
             }
 
             // Valid message.
-            self.has_peeked = true;
-            self.peek_total_size = size + 2;
+            self.has_peeked.set(true);
+            self.peek_total_size.set(size + 2);
 
             // SAFETY: `phys_pos + 2 + size <= CAPACITY` — the producer
             // verified this before committing.  The Acquire/Release pair on
@@ -408,18 +432,28 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
     ///
     /// Calling `release` without a preceding `peek` is a no-op.
     pub fn release(&mut self) {
-        if !self.has_peeked {
+        self.release_inner();
+    }
+
+    fn release_inner(&self) {
+        if !self.has_peeked.get() {
             return;
         }
 
-        self.read_pos = advance_logical(self.read_pos, self.peek_total_size, CAPACITY);
+        self.read_pos.set(advance_logical(
+            self.read_pos.get(),
+            self.peek_total_size.get(),
+            CAPACITY,
+        ));
 
         // Publish the updated read cursor to the producer.
         // Release: makes the freed buffer space visible to the producer.
-        self.queue.received.store(self.read_pos, Ordering::Release);
+        self.queue
+            .received
+            .store(self.read_pos.get(), Ordering::Release);
 
-        self.has_peeked = false;
-        self.peek_total_size = 0;
+        self.has_peeked.set(false);
+        self.peek_total_size.set(0);
     }
 
     /// Discard all pending messages, resetting the queue to empty.
@@ -427,6 +461,42 @@ impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize>
         while self.peek().is_some() {
             self.release();
         }
+    }
+}
+
+impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize> Reader
+    for QueueReader<'_, CAPACITY, MAX_ELEMENT_SIZE>
+{
+    fn max_size(&self) -> usize {
+        MAX_ELEMENT_SIZE
+    }
+
+    fn peek(&self) -> Option<&[u8]> {
+        self.peek_inner()
+    }
+
+    fn release(&mut self) {
+        self.release_inner();
+    }
+}
+
+impl<const CAPACITY: usize, const MAX_ELEMENT_SIZE: usize> Writer
+    for QueueWriter<'_, CAPACITY, MAX_ELEMENT_SIZE>
+{
+    fn max_size(&self) -> usize {
+        MAX_ELEMENT_SIZE
+    }
+
+    fn allocate(&mut self, size: usize) -> Option<&mut [u8]> {
+        Self::allocate(self, size)
+    }
+
+    fn commit(&mut self) {
+        Self::commit(self);
+    }
+
+    fn flush(&mut self) {
+        // Committed messages are immediately visible; nothing is buffered.
     }
 }
 

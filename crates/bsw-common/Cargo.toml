@@ -1,0 +1,15 @@
+[package]
+name = "bsw-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared allocation-free result, identifier, and byte-view types for OpenBSW Rust"
+
+[features]
+default = ["std"]
+std = []
+
+[lints]
+workspace = true

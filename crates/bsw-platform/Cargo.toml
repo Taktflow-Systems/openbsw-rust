@@ -1,0 +1,18 @@
+[package]
+name = "bsw-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Platform abstraction traits (reset, watchdog, critical sections, entropy, identity) for OpenBSW Rust"
+
+[features]
+default = ["std"]
+std = ["bsw-time/std"]
+
+[dependencies]
+bsw-time = { path = "../bsw-time", default-features = false }
+
+[lints]
+workspace = true

@@ -27,12 +27,12 @@ const RELOAD_1S: u32 = 999;
 
 #[inline(always)]
 unsafe fn reg_write(offset: usize, val: u32) {
-    unsafe { core::ptr::write_volatile((IWDG_BASE + offset) as *mut u32, val) }
+    unsafe { crate::mmio::write((IWDG_BASE + offset) as *mut u32, val) }
 }
 
 #[inline(always)]
 unsafe fn reg_read(offset: usize) -> u32 {
-    unsafe { core::ptr::read_volatile((IWDG_BASE + offset) as *const u32) }
+    unsafe { crate::mmio::read((IWDG_BASE + offset) as *const u32) }
 }
 
 /// Independent watchdog driver.
@@ -44,6 +44,10 @@ pub struct Iwdg {
 }
 
 impl Iwdg {
+    pub const fn from_token(_token: crate::board::Watchdog) -> Self {
+        Self::new()
+    }
+
     /// Create a new watchdog instance (not yet started).
     #[must_use]
     pub const fn new() -> Self {
@@ -117,5 +121,32 @@ impl Iwdg {
 impl Default for Iwdg {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl bsw_platform::Watchdog for Iwdg {
+    fn start(&mut self, timeout: bsw_time::Duration) -> Result<(), bsw_platform::WatchdogError> {
+        if self.started {
+            return Err(bsw_platform::WatchdogError::AlreadyRunning);
+        }
+        let nanos = timeout.as_nanos();
+        if nanos == 0 || !nanos.is_multiple_of(1_000_000) {
+            return Err(bsw_platform::WatchdogError::UnsupportedTimeout);
+        }
+        let millis = timeout.as_millis();
+        if !(1..=4096).contains(&millis) {
+            return Err(bsw_platform::WatchdogError::UnsupportedTimeout);
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        self.start_with_timeout(millis as u32);
+        Ok(())
+    }
+
+    fn service(&mut self) {
+        self.kick();
+    }
+
+    fn is_running(&self) -> bool {
+        self.started
     }
 }

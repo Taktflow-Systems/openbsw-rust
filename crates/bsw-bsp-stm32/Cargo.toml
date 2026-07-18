@@ -1,8 +1,10 @@
 [package]
 name = "bsw-bsp-stm32"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "STM32 F4/G4 Board Support Package — Rust port of OpenBSW STM32 platform"
 
 [features]
@@ -16,6 +18,10 @@ bsw-can = { path = "../bsw-can", default-features = false }
 bsw-docan = { path = "../bsw-docan", default-features = false }
 bsw-uds = { path = "../bsw-uds", default-features = false }
 bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
+bsw-console = { path = "../bsw-console", default-features = false }
+bsw-platform = { path = "../bsw-platform", default-features = false }
+bsw-storage = { path = "../bsw-storage", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
 bsw-transport = { path = "../bsw-transport", default-features = false }
 bsw-util = { path = "../bsw-util", default-features = false }
 
@@ -26,3 +32,63 @@ stm32f4xx-hal = { version = "0.23", features = ["stm32f413", "can"], optional = 
 
 [lints]
 workspace = true
+
+[[example]]
+name = "app_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "app_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "blink_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "blink_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "bsw_stack_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "bsw_stack_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "can_loopback_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "can_loopback_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "can_server_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "can_server_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "can_tester_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "can_tester_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "nvm_test_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "uds_server_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "uds_server_g474"
+required-features = ["stm32g474"]

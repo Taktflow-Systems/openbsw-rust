@@ -777,10 +777,7 @@ pub fn write_be_u48(dst: &mut [u8], value: u64) {
 /// Panics if `length > T::bit_width()`.
 pub fn read_be_bits<T: BeInteger>(src: &[u8], offset: usize, length: usize) -> T {
     assert!(length <= T::bit_width(), "length exceeds target type width");
-    assert!(
-        offset + length <= src.len() * 8,
-        "bit range out of bounds"
-    );
+    assert!(offset + length <= src.len() * 8, "bit range out of bounds");
 
     if length == 0 {
         return T::from_u64(0);
@@ -799,7 +796,7 @@ pub fn read_be_bits<T: BeInteger>(src: &[u8], offset: usize, length: usize) -> T
         // Extract `bits_to_take` bits starting at MSB position `bit_in_byte`
         // of the current byte.
         let shift = bits_available - bits_to_take; // right-shift to align to LSB
-        // Use u16 for the mask to avoid overflow when bits_to_take == 8.
+                                                   // Use u16 for the mask to avoid overflow when bits_to_take == 8.
         let mask = ((1u16 << bits_to_take) - 1) as u8;
         let extracted = u64::from((src[byte_idx] >> shift) & mask);
 
@@ -821,10 +818,7 @@ pub fn read_be_bits<T: BeInteger>(src: &[u8], offset: usize, length: usize) -> T
 /// Panics if `length > T::bit_width()`.
 pub fn write_be_bits<T: BeInteger>(dst: &mut [u8], value: T, offset: usize, length: usize) {
     assert!(length <= T::bit_width(), "length exceeds source type width");
-    assert!(
-        offset + length <= dst.len() * 8,
-        "bit range out of bounds"
-    );
+    assert!(offset + length <= dst.len() * 8, "bit range out of bounds");
 
     if length == 0 {
         return;

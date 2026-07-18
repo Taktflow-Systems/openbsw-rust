@@ -108,8 +108,14 @@ mod tests {
     #[test]
     fn from_byte_valid() {
         assert_eq!(Nrc::from_byte(0x10), Some(Nrc::GeneralReject));
-        assert_eq!(Nrc::from_byte(0x7F), Some(Nrc::ServiceNotSupportedInActiveSession));
-        assert_eq!(Nrc::from_byte(0x78), Some(Nrc::RequestCorrectlyReceivedResponsePending));
+        assert_eq!(
+            Nrc::from_byte(0x7F),
+            Some(Nrc::ServiceNotSupportedInActiveSession)
+        );
+        assert_eq!(
+            Nrc::from_byte(0x78),
+            Some(Nrc::RequestCorrectlyReceivedResponsePending)
+        );
     }
 
     #[test]

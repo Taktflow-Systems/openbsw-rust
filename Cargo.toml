@@ -3,6 +3,20 @@ resolver = "2"
 members = [
     "crates/*",
 ]
+exclude = ["fuzz", "tools/resource-probe"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+license = "Apache-2.0"
+repository = "https://github.com/Taktflow-Systems/openbsw-rust"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -15,11 +29,26 @@ must_use_candidate = "allow"
 cast_possible_truncation = "allow"  # UDS/COM protocol uses fixed byte widths
 cast_sign_loss = "allow"            # Signal packing needs sign-preserving casts
 cast_possible_wrap = "allow"        # u32↔i32 conversions in signal values
+cast_precision_loss = "allow"       # fixed embedded capacities are intentionally converted in statistics/tests
+cast_ptr_alignment = "allow"        # intrusive containers recover an aligned owner pointer from a field pointer
 doc_markdown = "allow"              # Technical terms (ISO-TP, FDCAN, etc.)
+borrow_as_ptr = "allow"              # reviewed intrusive-container raw-pointer construction
+explicit_iter_loop = "allow"        # explicit iterator calls are often clearer in container internals
 inline_always = "allow"             # Small MMIO helpers benefit from forced inlining
+iter_without_into_iter = "allow"     # intrusive collections expose controlled iteration without blanket conversion
 match_same_arms = "allow"           # Explicit arms improve readability for protocol code
+needless_for_each = "allow"          # used in compact test/setup code
+ptr_as_ptr = "allow"                 # reviewed intrusive-container pointer recovery
+ptr_cast_constness = "allow"         # intrusive links require interior mutability behind shared references
+ref_as_ptr = "allow"                 # reviewed pointer identity checks in fixed pools
+should_panic_without_expect = "allow" # legacy invariant tests are not API-message contracts
+stable_sort_primitive = "allow"      # test readability is preferred over micro-optimizing tiny vectors
+uninlined_format_args = "allow"      # macro tests intentionally exercise formatting syntax
+unnecessary_literal_bound = "allow"  # trait signatures determine returned string lifetime
 
 [profile.release]
 lto = true
 codegen-units = 1
 opt-level = "s"  # optimize for size (embedded target)
+panic = "abort"
+overflow-checks = true

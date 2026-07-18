@@ -11,8 +11,7 @@ use bsw_can::can_id::CanId;
 use bsw_can::filter::{BitFieldFilter, Filter, IntervalFilter};
 use bsw_can::frame::CanFrame;
 use bsw_can::transceiver::{
-    AbstractTransceiver, ErrorCode, State, TransceiverState,
-    BAUDRATE_HIGHSPEED, BAUDRATE_LOWSPEED,
+    AbstractTransceiver, ErrorCode, State, TransceiverState, BAUDRATE_HIGHSPEED, BAUDRATE_LOWSPEED,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -84,7 +83,13 @@ mod state_machine {
     /// is_in_state correctly identifies current state.
     #[test]
     fn is_in_state_all_states() {
-        let all_states = [State::Closed, State::Initialized, State::Waking, State::Open, State::Muted];
+        let all_states = [
+            State::Closed,
+            State::Initialized,
+            State::Waking,
+            State::Open,
+            State::Muted,
+        ];
         for &current in &all_states {
             let mut t = Trx::new(0);
             t.set_state(current);

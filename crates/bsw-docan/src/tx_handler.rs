@@ -237,11 +237,7 @@ impl TxProtocolHandler {
     /// - `CTS` → `Send`, sets new block boundary.
     /// - `Wait` → stays in `Wait` (or `Fail` if wait count exceeded).
     /// - `Overflow` → `Fail`.
-    pub fn handle_flow_control(
-        &mut self,
-        status: FlowStatus,
-        block_size: u8,
-    ) -> TxTransition {
+    pub fn handle_flow_control(&mut self, status: FlowStatus, block_size: u8) -> TxTransition {
         if self.state != TxState::Wait {
             return TxTransition {
                 state_changed: false,
@@ -402,7 +398,7 @@ mod tests {
         let mut h = TxProtocolHandler::new(3, 10);
         h.start();
         h.frame_sending(); // FF queued, index → 1
-        h.frames_sent();   // → Wait
+        h.frames_sent(); // → Wait
 
         let t = h.handle_flow_control(FlowStatus::ContinueToSend, 0);
         assert!(t.state_changed);
@@ -480,7 +476,7 @@ mod tests {
         let mut h = TxProtocolHandler::new(4, 10);
         h.start();
         h.frame_sending(); // FF, index → 1
-        h.frames_sent();   // → Wait for initial FC
+        h.frames_sent(); // → Wait for initial FC
 
         // Receive CTS with block_size=2: block_end = 1 + 2 = 3
         h.handle_flow_control(FlowStatus::ContinueToSend, 2);
@@ -537,19 +533,19 @@ mod tests {
         h.start();
 
         // Send FF
-        h.frame_sending();    // index → 1
-        h.frames_sent();      // → Wait
+        h.frame_sending(); // index → 1
+        h.frames_sent(); // → Wait
 
         // Receive CTS, unlimited block
         h.handle_flow_control(FlowStatus::ContinueToSend, 0);
         assert_eq!(h.state(), TxState::Send);
 
         // Send CF1
-        h.frame_sending();    // index → 2
-        h.frames_sent();      // still in Send
+        h.frame_sending(); // index → 2
+        h.frames_sent(); // still in Send
 
         // Send CF2
-        h.frame_sending();    // index → 3
+        h.frame_sending(); // index → 3
         let t = h.frames_sent(); // index=3 == frame_count=3 → Success
         assert!(t.state_changed);
         assert_eq!(h.state(), TxState::Success);

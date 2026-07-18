@@ -40,8 +40,7 @@
 //! assert_eq!(pool.size(), 2);          // 2 free slots remain
 //! assert_eq!(pool.acquired_count(), 2);
 //!
-//! // SAFETY: a_ptr was obtained from this pool and the slot is still acquired.
-//! pool.release(unsafe { &*a_ptr });
+//! pool.release(a_ptr);
 //! assert_eq!(pool.size(), 3);
 //! pool.clear();
 //! assert!(pool.is_full());
@@ -112,6 +111,10 @@ impl<T, const N: usize, const B: usize> ObjectPool<T, N, B> {
     pub const fn new() -> Self {
         // Trigger the compile-time check.
         let () = Self::CHECK_B;
+        assert!(
+            core::mem::size_of::<T>() > 0,
+            "ObjectPool does not support zero-sized element types"
+        );
 
         Self {
             // SAFETY: MaybeUninit arrays can be initialised via uninit().assume_init().
@@ -215,7 +218,7 @@ impl<T, const N: usize, const B: usize> ObjectPool<T, N, B> {
     ///
     /// If the slot is already free (double-release), the method silently does
     /// nothing — matching the C++ behaviour where `isUsed` is checked first.
-    pub fn release(&mut self, object: &T) {
+    pub fn release(&mut self, object: *const T) {
         assert!(
             self.contains(object),
             "ObjectPool::release: object does not belong to this pool"
@@ -240,15 +243,16 @@ impl<T, const N: usize, const B: usize> ObjectPool<T, N, B> {
     /// Returns `true` if `object` falls within this pool's internal storage range.
     ///
     /// This does **not** check whether the slot is currently acquired.
-    pub fn contains(&self, object: &T) -> bool {
-        if N == 0 {
+    pub fn contains(&self, object: *const T) -> bool {
+        if N == 0 || core::mem::size_of::<T>() == 0 {
             return false;
         }
-        let obj_addr = object as *const T as usize;
-        // SAFETY: we only read pointer values, never dereference through them here.
+        let obj_addr = object as usize;
         let base = self.data[0].as_ptr() as usize;
         let last = self.data[N - 1].as_ptr() as usize;
-        obj_addr >= base && obj_addr <= last
+        obj_addr >= base
+            && obj_addr <= last
+            && (obj_addr - base).is_multiple_of(core::mem::size_of::<T>())
     }
 
     // -----------------------------------------------------------------------
@@ -317,12 +321,9 @@ impl<T, const N: usize, const B: usize> ObjectPool<T, N, B> {
     /// Returns the slot index for `object`, which must be inside this pool.
     ///
     /// Caller must verify `contains(object)` first.
-    fn slot_index(&self, object: &T) -> usize {
-        let obj_ptr = object as *const T;
-        let base_ptr = self.data[0].as_ptr();
-        // SAFETY: obj_ptr is within the same allocated object (the inline array) as base_ptr,
-        // so offset_from is well-defined and yields a non-negative, in-bounds value.
-        unsafe { obj_ptr.offset_from(base_ptr) as usize }
+    fn slot_index(&self, object: *const T) -> usize {
+        let base = self.data[0].as_ptr() as usize;
+        (object as usize - base) / core::mem::size_of::<T>()
     }
 }
 
@@ -487,7 +488,10 @@ mod tests {
 
     impl<'a> DropCounter<'a> {
         fn new(drops: &'a Cell<usize>, value: i32) -> Self {
-            DropCounter { drops, _value: value }
+            DropCounter {
+                drops,
+                _value: value,
+            }
         }
     }
 
@@ -506,7 +510,10 @@ mod tests {
         let pool: Pool8<i32> = ObjectPool::new();
         assert_eq!(pool.size(), 8, "size() should equal N for a fresh pool");
         assert!(pool.is_full(), "is_full() should be true for a fresh pool");
-        assert!(!pool.is_empty(), "is_empty() should be false for a fresh pool");
+        assert!(
+            !pool.is_empty(),
+            "is_empty() should be false for a fresh pool"
+        );
         assert_eq!(pool.max_size(), 8);
         assert_eq!(pool.acquired_count(), 0);
     }
@@ -520,7 +527,11 @@ mod tests {
         let mut pool: Pool8<i32> = ObjectPool::new();
         let r = pool.acquire().unwrap();
         *r = 42;
-        assert_eq!(pool.size(), 7, "size() should decrease by 1 after one acquire");
+        assert_eq!(
+            pool.size(),
+            7,
+            "size() should decrease by 1 after one acquire"
+        );
         assert_eq!(pool.acquired_count(), 1);
         assert!(!pool.is_full());
         assert!(!pool.is_empty());
@@ -539,7 +550,10 @@ mod tests {
         }
         assert!(pool.is_empty(), "pool should be empty after N acquires");
         assert_eq!(pool.size(), 0);
-        assert!(pool.acquire().is_none(), "acquire on depleted pool must return None");
+        assert!(
+            pool.acquire().is_none(),
+            "acquire on depleted pool must return None"
+        );
         assert!(pool.acquire_with(99).is_none());
     }
 
@@ -562,7 +576,7 @@ mod tests {
 
         // Release the first slot via its raw pointer.
         // SAFETY: ptrs[0] was obtained from this pool and the slot is still acquired.
-        pool.release(unsafe { &*ptrs[0] });
+        pool.release(ptrs[0]);
         assert_eq!(pool.size(), 1);
         assert_eq!(pool.acquired_count(), 3);
     }
@@ -590,10 +604,13 @@ mod tests {
         let r_ptr: *const i32 = pool.acquire_with(1).unwrap();
         // SAFETY: r_ptr is a valid acquired slot; we take a shared ref for the duration of the
         // assert only, after the &mut from acquire_with is no longer live.
-        assert!(pool.contains(unsafe { &*r_ptr }), "contains must be true for pool slot");
+        assert!(pool.contains(r_ptr), "contains must be true for pool slot");
 
         let stack_val: i32 = 0;
-        assert!(!pool.contains(&stack_val), "contains must be false for stack variable");
+        assert!(
+            !pool.contains(&stack_val),
+            "contains must be false for stack variable"
+        );
     }
 
     #[test]
@@ -605,7 +622,7 @@ mod tests {
         }
         for p in &ptrs {
             // SAFETY: each pointer is from the pool and the slot is still acquired.
-            assert!(pool.contains(unsafe { &**p }));
+            assert!(pool.contains(*p));
         }
     }
 
@@ -668,7 +685,7 @@ mod tests {
 
         // Release slot 1 (value 10) — the second slot.
         // SAFETY: ptrs[1] is a valid acquired slot in this pool.
-        pool.release(unsafe { &*ptrs[1] });
+        pool.release(ptrs[1]);
 
         let mut vals = [0i32; 4];
         let mut count = 0usize;
@@ -692,10 +709,14 @@ mod tests {
 
         let r_ptr: *mut DropCounter<'_> =
             pool.acquire_with(DropCounter::new(&drops, 7)).unwrap() as *mut DropCounter<'_>;
-        assert_eq!(drops.get(), 0, "acquire_with must not drop the supplied value");
+        assert_eq!(
+            drops.get(),
+            0,
+            "acquire_with must not drop the supplied value"
+        );
 
         // SAFETY: r_ptr is a valid acquired slot still belonging to this pool.
-        pool.release(unsafe { &*r_ptr });
+        pool.release(r_ptr);
         assert_eq!(drops.get(), 1, "release must drop the object exactly once");
         assert!(pool.is_full());
     }
@@ -714,7 +735,11 @@ mod tests {
             // Slot 2 left free intentionally — only 2 drops should occur.
             assert_eq!(drops.get(), 0);
         } // pool drops here
-        assert_eq!(drops.get(), 2, "pool Drop must destruct exactly the 2 acquired objects");
+        assert_eq!(
+            drops.get(),
+            2,
+            "pool Drop must destruct exactly the 2 acquired objects"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -731,7 +756,7 @@ mod tests {
 
         // Release slot 0.
         // SAFETY: p0 is an acquired slot in this pool.
-        pool.release(unsafe { &*p0 });
+        pool.release(p0);
         assert_eq!(pool.size(), 1);
 
         // Next acquire should reuse slot 0 (first-free scan returns index 0).
@@ -741,8 +766,8 @@ mod tests {
 
         // Clean up both remaining live slots.
         // SAFETY: p1 and p2 are both valid acquired slots in this pool.
-        pool.release(unsafe { &*p1 });
-        pool.release(unsafe { &*p2 });
+        pool.release(p1);
+        pool.release(p2);
     }
 
     // -----------------------------------------------------------------------
@@ -755,9 +780,15 @@ mod tests {
         assert_eq!(pool.size(), 0);
         assert_eq!(pool.max_size(), 0);
         // C++ full() means all N slots are available.  For N=0: 0 == 0 -> is_full is true.
-        assert!(pool.is_full(), "zero-cap pool: 0/0 slots available => is_full");
+        assert!(
+            pool.is_full(),
+            "zero-cap pool: 0/0 slots available => is_full"
+        );
         // 0 available slots => is_empty is also true.
-        assert!(pool.is_empty(), "zero-cap pool: 0 available slots => is_empty");
+        assert!(
+            pool.is_empty(),
+            "zero-cap pool: 0 available slots => is_empty"
+        );
         assert!(pool.acquire().is_none());
         assert!(pool.acquire_with(1).is_none());
         assert_eq!(pool.acquired_count(), 0);
@@ -813,7 +844,7 @@ mod tests {
 
         // Release slot 8 — bit 0 of the second byte.
         // SAFETY: ptrs[8] is a valid acquired slot in this pool.
-        pool.release(unsafe { &*ptrs[8] });
+        pool.release(ptrs[8]);
         assert_eq!(pool.size(), 1);
 
         // Iterator should yield slots 0-7 only.
@@ -835,15 +866,19 @@ mod tests {
 
         // First release: destructor fires once.
         // SAFETY: r_ptr is a valid acquired slot in this pool.
-        pool.release(unsafe { &*r_ptr });
+        pool.release(r_ptr);
         assert_eq!(drops.get(), 1);
         assert_eq!(pool.size(), 4);
 
         // Second release of the same address: slot is now free, destructor branch skipped.
         // SAFETY: the address is still within the pool's memory range; accessing a free slot's
         // address to pass to contains() is safe because we only compare addresses, not values.
-        pool.release(unsafe { &*r_ptr });
-        assert_eq!(drops.get(), 1, "drop count must not increase on double-release");
+        pool.release(r_ptr);
+        assert_eq!(
+            drops.get(),
+            1,
+            "drop count must not increase on double-release"
+        );
         assert_eq!(pool.size(), 4);
     }
 
@@ -942,7 +977,10 @@ mod tests {
         iter.next();
         iter.next();
         let (_, hi2) = iter.size_hint();
-        assert!(hi2.unwrap() <= 6, "upper bound should decrease as pos advances");
+        assert!(
+            hi2.unwrap() <= 6,
+            "upper bound should decrease as pos advances"
+        );
     }
 
     // -----------------------------------------------------------------------

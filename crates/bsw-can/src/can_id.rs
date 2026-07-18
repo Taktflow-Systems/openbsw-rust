@@ -74,7 +74,9 @@ impl CanId {
     pub const fn base(base_id: u16) -> Self {
         // Widening u16 → u32: lossless, but `u32::from` is not const-stable yet.
         #[allow(clippy::cast_lossless)]
-        { Self(base_id as u32 & MAX_RAW_BASE_ID as u32) }
+        {
+            Self(base_id as u32 & MAX_RAW_BASE_ID as u32)
+        }
     }
 
     /// Creates an extended-frame (29-bit) CAN ID.

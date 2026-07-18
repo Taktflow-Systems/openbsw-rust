@@ -30,12 +30,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "bsw-async"
+version = "0.1.0"
+dependencies = [
+ "bsw-time",
+]
+
+[[package]]
 name = "bsw-bsp-stm32"
 version = "0.1.0"
 dependencies = [
  "bsw-can",
+ "bsw-console",
  "bsw-docan",
  "bsw-lifecycle",
+ "bsw-platform",
+ "bsw-storage",
+ "bsw-time",
  "bsw-transport",
  "bsw-uds",
  "bsw-util",
@@ -49,6 +60,8 @@ name = "bsw-can"
 version = "0.1.0"
 dependencies = [
  "bsw-estd",
+ "bsw-time",
+ "libc",
 ]
 
 [[package]]
@@ -57,12 +70,30 @@ version = "0.1.0"
 dependencies = [
  "bsw-can",
  "bsw-estd",
+ "bsw-time",
+ "bsw-util",
+]
+
+[[package]]
+name = "bsw-common"
+version = "0.1.0"
+
+[[package]]
+name = "bsw-console"
+version = "0.1.0"
+dependencies = [
+ "bsw-async",
+ "bsw-io",
+ "bsw-lifecycle",
+ "bsw-time",
 ]
 
 [[package]]
 name = "bsw-docan"
 version = "0.1.0"
 dependencies = [
+ "bsw-can",
+ "bsw-time",
  "bsw-transport",
 ]
 
@@ -71,7 +102,10 @@ name = "bsw-doip"
 version = "0.1.0"
 dependencies = [
  "bsw-ethernet",
+ "bsw-lifecycle",
+ "bsw-time",
  "bsw-transport",
+ "bsw-uds",
 ]
 
 [[package]]
@@ -81,6 +115,10 @@ version = "0.1.0"
 [[package]]
 name = "bsw-ethernet"
 version = "0.1.0"
+dependencies = [
+ "bsw-lifecycle",
+ "bsw-logger",
+]
 
 [[package]]
 name = "bsw-io"
@@ -89,9 +127,54 @@ version = "0.1.0"
 [[package]]
 name = "bsw-lifecycle"
 version = "0.1.0"
+dependencies = [
+ "bsw-time",
+]
+
+[[package]]
+name = "bsw-logger"
+version = "0.1.0"
+dependencies = [
+ "bsw-time",
+]
+
+[[package]]
+name = "bsw-middleware"
+version = "0.1.0"
+
+[[package]]
+name = "bsw-platform"
+version = "0.1.0"
+dependencies = [
+ "bsw-time",
+]
+
+[[package]]
+name = "bsw-platform-posix"
+version = "0.1.0"
+dependencies = [
+ "bsw-async",
+ "bsw-can",
+ "bsw-console",
+ "bsw-ethernet",
+ "bsw-platform",
+ "bsw-storage",
+ "bsw-time",
+]
 
 [[package]]
 name = "bsw-runtime"
+version = "0.1.0"
+
+[[package]]
+name = "bsw-storage"
+version = "0.1.0"
+dependencies = [
+ "bsw-util",
+]
+
+[[package]]
+name = "bsw-time"
 version = "0.1.0"
 
 [[package]]
@@ -102,6 +185,7 @@ version = "0.1.0"
 name = "bsw-uds"
 version = "0.1.0"
 dependencies = [
+ "bsw-time",
  "bsw-transport",
 ]
 
@@ -280,6 +364,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d758ba1b47b00caf47f24925c0074ecb20d6dfcffe7f6d53395c0465674841a"
 
 [[package]]
+name = "libc"
+version = "0.2.186"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+
+[[package]]
 name = "litrs"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -311,6 +401,23 @@ name = "num-conv"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
+
+[[package]]
+name = "openbsw-reference-app"
+version = "0.1.0"
+dependencies = [
+ "bsw-can",
+ "bsw-console",
+ "bsw-docan",
+ "bsw-doip",
+ "bsw-lifecycle",
+ "bsw-logger",
+ "bsw-middleware",
+ "bsw-platform-posix",
+ "bsw-storage",
+ "bsw-time",
+ "bsw-uds",
+]
 
 [[package]]
 name = "portable-atomic"

@@ -1,0 +1,38 @@
+{
+  "targets": {
+    "stm32f413": {
+      "flash_bytes_max": 11000,
+      "bss_bytes_max": 128,
+      "largest_frame_bytes_max": 2560
+    },
+    "stm32g474": {
+      "flash_bytes_max": 18000,
+      "bss_bytes_max": 128,
+      "largest_frame_bytes_max": 2560
+    }
+  },
+  "buffers": {
+    "can_frame_max": 80,
+    "memory_queue_1024_64_max": 1100,
+    "fixed_vec_u8_4096_max": 4120,
+    "object_pool_64x16_max": 1100,
+    "bounded_string_128_max": 144,
+    "timer_queue_32_max": 1400,
+    "buffered_logger_4x8x64_max": 800,
+    "console_4x64_max": 152,
+    "transport_pool_4x4095_max": 17000,
+    "docan_tx_4095_max": 4300,
+    "docan_rx_4095_max": 4300,
+    "uds_connections_4x4095_max": 34000,
+    "middleware_message_256_max": 320,
+    "doip_discovery_entity_max": 96,
+    "stm32_can_interrupt_queue_32_max": 800,
+    "stm32_cycle_accumulator_max": 64,
+    "stm32_can_health_max": 64
+  },
+  "benchmarks": {
+    "crc32_bytes_per_second_min": 10000000,
+    "fixed_vec_ops_per_second_min": 1000000,
+    "disabled_log_ops_per_second_min": 100000000
+  }
+}

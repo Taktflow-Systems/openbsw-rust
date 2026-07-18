@@ -1,0 +1,29 @@
+[package]
+name = "openbsw-reference-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Composed POSIX reference application for the OpenBSW Rust port"
+
+[features]
+default = []
+socketcan = ["bsw-platform-posix/socketcan", "bsw-can/socketcan"]
+tracing = []
+
+[dependencies]
+bsw-can = { path = "../bsw-can" }
+bsw-console = { path = "../bsw-console" }
+bsw-docan = { path = "../bsw-docan" }
+bsw-doip = { path = "../bsw-doip" }
+bsw-lifecycle = { path = "../bsw-lifecycle" }
+bsw-logger = { path = "../bsw-logger" }
+bsw-middleware = { path = "../bsw-middleware" }
+bsw-platform-posix = { path = "../bsw-platform-posix" }
+bsw-storage = { path = "../bsw-storage" }
+bsw-time = { path = "../bsw-time" }
+bsw-uds = { path = "../bsw-uds" }
+
+[lints]
+workspace = true

@@ -103,7 +103,9 @@ pub enum DecodedFrame<'a> {
 /// Returns [`CodecResult::InvalidFrameSize`] if the buffer is too short to
 /// contain the PCI byte, or [`CodecResult::InvalidFrameType`] for unknown types.
 pub fn decode_frame_type(data: &[u8], config: &CodecConfig) -> Result<FrameType, CodecResult> {
-    let pci = data.get(config.pci_offset).ok_or(CodecResult::InvalidFrameSize)?;
+    let pci = data
+        .get(config.pci_offset)
+        .ok_or(CodecResult::InvalidFrameSize)?;
     match pci >> 4 {
         0 => Ok(FrameType::Single),
         1 => Ok(FrameType::First),
@@ -120,7 +122,10 @@ pub fn decode_frame_type(data: &[u8], config: &CodecConfig) -> Result<FrameType,
 /// The `data` slice must contain all bytes of the received CAN frame.
 /// Returned sub-slices borrow from `data`, so no copying occurs.
 #[allow(clippy::too_many_lines)] // Frame decoder is inherently a large match over 4 frame types
-pub fn decode_frame<'a>(data: &'a [u8], config: &CodecConfig) -> Result<DecodedFrame<'a>, CodecResult> {
+pub fn decode_frame<'a>(
+    data: &'a [u8],
+    config: &CodecConfig,
+) -> Result<DecodedFrame<'a>, CodecResult> {
     let off = config.pci_offset;
     // Need at least the PCI byte itself
     if data.len() <= off {
@@ -212,12 +217,7 @@ fn decode_first_frame(data: &[u8], off: usize, pci: u8) -> Result<DecodedFrame<'
         if data.len() < off + 6 {
             return Err(CodecResult::InvalidFrameSize);
         }
-        let len = u32::from_be_bytes([
-            data[off + 2],
-            data[off + 3],
-            data[off + 4],
-            data[off + 5],
-        ]);
+        let len = u32::from_be_bytes([data[off + 2], data[off + 3], data[off + 4], data[off + 5]]);
         if len <= 4095 {
             return Err(CodecResult::InvalidMessageSize);
         }
@@ -262,7 +262,9 @@ pub fn frame_count(
         let cf_count = remaining.div_ceil(consecutive_frame_data_size);
         // cf_count is bounded by message_length/1 at most = u32::MAX frames; safe cast.
         #[allow(clippy::cast_possible_truncation)]
-        { 1 + cf_count as u32 }
+        {
+            1 + cf_count as u32
+        }
     }
 }
 
@@ -292,7 +294,9 @@ pub fn encode_single_frame(
         }
         // dl ≤ 7, safe truncation to u8
         #[allow(clippy::cast_possible_truncation)]
-        { buf[off] = dl as u8; }
+        {
+            buf[off] = dl as u8;
+        }
         buf[off + 1..off + 1 + dl].copy_from_slice(data);
         Ok(off + 1 + dl)
     } else {
@@ -303,7 +307,9 @@ pub fn encode_single_frame(
         }
         buf[off] = 0x00;
         #[allow(clippy::cast_possible_truncation)]
-        { buf[off + 1] = dl as u8; }
+        {
+            buf[off + 1] = dl as u8;
+        }
         buf[off + 2..off + 2 + dl].copy_from_slice(data);
         Ok(off + 2 + dl)
     }

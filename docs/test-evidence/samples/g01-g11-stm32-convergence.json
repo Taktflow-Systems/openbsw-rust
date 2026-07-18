@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "evidence_id": "g01-g11-stm32-convergence",
+  "package_ids": ["G01", "G02", "G03", "G04", "G05", "G06", "G07", "G08", "G09", "G10", "G11"],
+  "started_at": "2026-07-18T20:25:00Z",
+  "source": {
+    "rust_revision": "working-tree",
+    "openbsw_revision": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "environment": {
+    "os": "windows",
+    "rust": "1.94.0",
+    "python": "3.14.3"
+  },
+  "commands": [
+    "cargo test -p bsw-bsp-stm32 --lib",
+    "cargo clippy -p bsw-bsp-stm32 --lib -- -D warnings",
+    "cargo clippy -p bsw-bsp-stm32 --lib --target thumbv7em-none-eabihf --no-default-features --features stm32f413 -- -D warnings",
+    "cargo clippy -p bsw-bsp-stm32 --lib --target thumbv7em-none-eabihf --no-default-features --features stm32g474 -- -D warnings",
+    "cargo check -p bsw-bsp-stm32 --examples --target thumbv7em-none-eabihf --no-default-features --features stm32f413",
+    "cargo check -p bsw-bsp-stm32 --examples --target thumbv7em-none-eabihf --no-default-features --features stm32g474",
+    "python tools/port/check_stm32_examples.py",
+    "probe-rs download --chip STM32G474RE --probe $G474_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/nvm_test_g474",
+    "probe-rs download --chip STM32G474RE --probe $G474_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/app_g474",
+    "probe-rs download --chip STM32F413ZH --probe $F413_PROBE --verify --disable-progressbars target/thumbv7em-none-eabihf/release/examples/app_f413"
+  ],
+  "results": {
+    "outcome": "passed",
+    "passed": 46,
+    "failed": 0,
+    "skipped": 0,
+    "errors": 0
+  },
+  "artifacts": [
+    {"name": "nvm_test_g474", "sha256": "00ccf5b228a57dc6e66ebee777ee5f7214ab98e151ae5cdad104e727ed76558a"},
+    {"name": "app_g474", "sha256": "a774adf6fcd259411fd64b15852ae6b8ce06a68f5d9815c0f9129fcf9ba9765f"},
+    {"name": "app_f413", "sha256": "6f60dbe277d05080713a018eea4540f870dca9b912727793997b08eea01bd418"}
+  ],
+  "hil": {
+    "boards": ["nucleo-g474re", "nucleo-f413zh"],
+    "probe_class": "ST-Link",
+    "reset_method": "debug-probe system reset",
+    "fixture_revision": "workspace-board-fixture",
+    "isolation": "one selected probe and virtual COM port per run",
+    "storage_region": "linker-reserved top 8 KiB on G474"
+  }
+}

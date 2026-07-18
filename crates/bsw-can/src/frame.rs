@@ -15,6 +15,7 @@
 //! | `can-fd` | 64 (CAN-FD)        |
 
 use core::ops::{Index, IndexMut};
+use core::{error::Error, fmt};
 
 use crate::can_id::CanId;
 
@@ -34,6 +35,33 @@ pub const MAX_FRAME_LENGTH: usize = 64;
 
 /// Number of overhead bits in a classic CAN frame (for bus load calculations).
 pub const CAN_OVERHEAD_BITS: u8 = 47;
+
+/// Error returned when a frame payload cannot fit the selected CAN mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrameError {
+    /// The requested payload is longer than [`MAX_FRAME_LENGTH`].
+    PayloadTooLong {
+        /// Requested byte length.
+        length: usize,
+        /// Maximum byte length for this build.
+        maximum: usize,
+    },
+}
+
+impl fmt::Display for FrameError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PayloadTooLong { length, maximum } => {
+                write!(
+                    formatter,
+                    "payload length {length} exceeds maximum {maximum}"
+                )
+            }
+        }
+    }
+}
+
+impl Error for FrameError {}
 
 // ---------------------------------------------------------------------------
 // CanFrame
@@ -89,18 +117,25 @@ impl CanFrame {
     ///
     /// Panics if `data.len() > MAX_FRAME_LENGTH`.
     pub fn with_data(id: CanId, data: &[u8]) -> Self {
-        assert!(
-            data.len() <= MAX_FRAME_LENGTH,
-            "CanFrame::with_data: data length {} exceeds MAX_FRAME_LENGTH {}",
-            data.len(),
-            MAX_FRAME_LENGTH
-        );
+        Self::try_with_data(id, data).unwrap_or_else(|error| panic!("CanFrame::with_data: {error}"))
+    }
+
+    /// Tries to create a frame with the given payload.
+    pub fn try_with_data(id: CanId, data: &[u8]) -> Result<Self, FrameError> {
+        if data.len() > MAX_FRAME_LENGTH {
+            return Err(FrameError::PayloadTooLong {
+                length: data.len(),
+                maximum: MAX_FRAME_LENGTH,
+            });
+        }
         let mut frame = Self::with_id(id);
         frame.payload[..data.len()].copy_from_slice(data);
-        // SAFETY: len <= MAX_FRAME_LENGTH <= 64 which fits in u8; assert above guards this.
+        // MAX_FRAME_LENGTH is at most 64 and therefore fits in u8.
         #[allow(clippy::cast_possible_truncation)]
-        { frame.payload_length = data.len() as u8; }
-        frame
+        {
+            frame.payload_length = data.len() as u8;
+        }
+        Ok(frame)
     }
 
     /// Creates a frame from a raw 32-bit ID value, a data slice, and an
@@ -111,6 +146,15 @@ impl CanFrame {
     /// Panics if `data.len() > MAX_FRAME_LENGTH`.
     pub fn with_raw_id(raw_id: u32, data: &[u8], is_extended: bool) -> Self {
         Self::with_data(CanId::id(raw_id, is_extended), data)
+    }
+
+    /// Tries to create a frame from a raw ID and payload.
+    pub fn try_with_raw_id(
+        raw_id: u32,
+        data: &[u8],
+        is_extended: bool,
+    ) -> Result<Self, FrameError> {
+        Self::try_with_data(CanId::id(raw_id, is_extended), data)
     }
 }
 
@@ -150,16 +194,25 @@ impl CanFrame {
     ///
     /// Panics if `data.len() > MAX_FRAME_LENGTH`.
     pub fn set_payload(&mut self, data: &[u8]) {
-        assert!(
-            data.len() <= MAX_FRAME_LENGTH,
-            "CanFrame::set_payload: data length {} exceeds MAX_FRAME_LENGTH {}",
-            data.len(),
-            MAX_FRAME_LENGTH
-        );
+        self.try_set_payload(data)
+            .unwrap_or_else(|error| panic!("CanFrame::set_payload: {error}"));
+    }
+
+    /// Tries to replace the payload without panicking on external input.
+    pub fn try_set_payload(&mut self, data: &[u8]) -> Result<(), FrameError> {
+        if data.len() > MAX_FRAME_LENGTH {
+            return Err(FrameError::PayloadTooLong {
+                length: data.len(),
+                maximum: MAX_FRAME_LENGTH,
+            });
+        }
         self.payload[..data.len()].copy_from_slice(data);
-        // SAFETY: len <= MAX_FRAME_LENGTH <= 64; assert above guards this.
+        // MAX_FRAME_LENGTH is at most 64 and therefore fits in u8.
         #[allow(clippy::cast_possible_truncation)]
-        { self.payload_length = data.len() as u8; }
+        {
+            self.payload_length = data.len() as u8;
+        }
+        Ok(())
     }
 
     /// Returns the current payload length in bytes.
@@ -175,11 +228,21 @@ impl CanFrame {
     /// Panics if `len as usize > MAX_FRAME_LENGTH`.
     #[inline]
     pub fn set_payload_length(&mut self, len: u8) {
-        assert!(
-            (len as usize) <= MAX_FRAME_LENGTH,
-            "CanFrame::set_payload_length: len {len} exceeds MAX_FRAME_LENGTH {MAX_FRAME_LENGTH}"
-        );
+        self.try_set_payload_length(len)
+            .unwrap_or_else(|error| panic!("CanFrame::set_payload_length: {error}"));
+    }
+
+    /// Tries to set the live payload length.
+    #[inline]
+    pub fn try_set_payload_length(&mut self, len: u8) -> Result<(), FrameError> {
+        if usize::from(len) > MAX_FRAME_LENGTH {
+            return Err(FrameError::PayloadTooLong {
+                length: usize::from(len),
+                maximum: MAX_FRAME_LENGTH,
+            });
+        }
         self.payload_length = len;
+        Ok(())
     }
 
     /// Returns the maximum supported payload length (compile-time constant).
@@ -187,7 +250,9 @@ impl CanFrame {
     pub const fn max_payload_length() -> u8 {
         // MAX_FRAME_LENGTH is 8 or 64, both well within u8 range.
         #[allow(clippy::cast_possible_truncation)]
-        { MAX_FRAME_LENGTH as u8 }
+        {
+            MAX_FRAME_LENGTH as u8
+        }
     }
 
     /// Returns the reception timestamp in microseconds.
@@ -255,7 +320,7 @@ impl IndexMut<u8> for CanFrame {
 
 #[cfg(test)]
 mod tests {
-    use super::{CanFrame, MAX_FRAME_LENGTH};
+    use super::{CanFrame, FrameError, MAX_FRAME_LENGTH};
     use crate::can_id::CanId;
 
     // 1 — default / new frame has zeroed fields
@@ -381,10 +446,30 @@ mod tests {
 
     // 15 — set_payload panics when data is too long
     #[test]
-    #[should_panic(expected = "exceeds MAX_FRAME_LENGTH")]
+    #[should_panic(expected = "exceeds maximum")]
     fn set_payload_panics_on_overflow() {
         let mut f = CanFrame::new();
         let too_long = [0u8; MAX_FRAME_LENGTH + 1];
         f.set_payload(&too_long);
+    }
+
+    #[test]
+    fn fallible_payload_apis_report_capacity() {
+        let too_long = [0u8; MAX_FRAME_LENGTH + 1];
+        let expected = FrameError::PayloadTooLong {
+            length: MAX_FRAME_LENGTH + 1,
+            maximum: MAX_FRAME_LENGTH,
+        };
+        assert_eq!(
+            CanFrame::try_with_data(CanId::base(0), &too_long),
+            Err(expected)
+        );
+
+        let mut frame = CanFrame::new();
+        assert_eq!(frame.try_set_payload(&too_long), Err(expected));
+        assert_eq!(
+            frame.try_set_payload_length((MAX_FRAME_LENGTH + 1) as u8),
+            Err(expected)
+        );
     }
 }

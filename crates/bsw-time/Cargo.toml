@@ -1,0 +1,15 @@
+[package]
+name = "bsw-time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Allocation-free monotonic time and timer queue contracts for OpenBSW Rust"
+
+[features]
+default = ["std"]
+std = []
+
+[lints]
+workspace = true

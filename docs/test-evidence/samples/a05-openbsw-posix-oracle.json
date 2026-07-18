@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "evidence_id": "a05-openbsw-posix-oracle",
+  "package_ids": ["A05", "A06"],
+  "started_at": "2026-07-17T19:35:01Z",
+  "source": {
+    "rust_revision": "working-tree",
+    "openbsw_revision": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "environment": {
+    "os": "windows-with-ubuntu-24.04-wsl",
+    "rust": "1.94.0",
+    "python": "3.14.3",
+    "cmake": "3.28.3",
+    "compiler": "gcc-13.3"
+  },
+  "commands": [
+    "tools/port/openbsw_oracle.ps1 -Action Test -Jobs 16",
+    "tools/port/openbsw_oracle.ps1 -Action Reference -Jobs 16"
+  ],
+  "results": {
+    "outcome": "passed",
+    "passed": 1385,
+    "failed": 0,
+    "skipped": 0,
+    "errors": 0
+  },
+  "artifacts": []
+}

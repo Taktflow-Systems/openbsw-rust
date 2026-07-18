@@ -7,17 +7,11 @@
 
 use core::ptr;
 
-/// NO_INIT RAM base address for F4 (320 KB SRAM, top 1 KB).
-#[cfg(feature = "stm32f413")]
-pub const NOINIT_BASE: u32 = 0x2004_FC00;
-
-/// NO_INIT RAM base address for G4 (128 KB SRAM, top 1 KB).
-#[cfg(feature = "stm32g474")]
-pub const NOINIT_BASE: u32 = 0x2001_FC00;
-
-/// Fallback for no-feature builds (host check).
-#[cfg(not(any(feature = "stm32f413", feature = "stm32g474")))]
-pub const NOINIT_BASE: u32 = 0x2000_0000;
+unsafe extern "C" {
+    /// Supplied by the selected board linker script; the whole 1 KiB NOINIT
+    /// region has one owner in this module.
+    static mut _noinit_start: u32;
+}
 
 /// Size of the fault dump in bytes (0x140 = 320 bytes).
 pub const DUMP_SIZE: usize = 0x140;
@@ -81,7 +75,7 @@ mod offset {
 /// Cortex-M exception frame on the appropriate stack (MSP or PSP).
 #[allow(clippy::too_many_lines)]
 unsafe fn write_fault_dump(ef: &cortex_m_rt::ExceptionFrame) {
-    let dump = NOINIT_BASE as *mut u32;
+    let dump = core::ptr::addr_of_mut!(_noinit_start);
     let words = DUMP_SIZE / 4;
 
     // Zero the dump region
@@ -136,9 +130,32 @@ unsafe fn write_fault_dump(ef: &cortex_m_rt::ExceptionFrame) {
     unsafe { ptr::write_volatile(dump.add(offset::CHECKSUM), checksum) };
 }
 
+/// Validate the retained dump after reset without changing it.
+#[must_use]
+pub fn fault_dump_valid() -> bool {
+    let dump = core::ptr::addr_of_mut!(_noinit_start);
+    let mut checksum = 0u32;
+    for index in 0..offset::CHECKSUM {
+        // SAFETY: linker guarantees the 1 KiB NOINIT region; the dump uses 320 B.
+        checksum ^= unsafe { ptr::read_volatile(dump.add(index)) };
+    }
+    // SAFETY: checksum is the final word of the reserved dump.
+    let stored = unsafe { ptr::read_volatile(dump.add(offset::CHECKSUM)) };
+    stored != 0 && checksum == stored
+}
+
+/// Clear a retained dump after startup has persisted or reported it.
+pub fn clear_fault_dump() {
+    let dump = core::ptr::addr_of_mut!(_noinit_start);
+    for index in 0..DUMP_SIZE / 4 {
+        // SAFETY: linker guarantees the reserved NOINIT range.
+        unsafe { ptr::write_volatile(dump.add(index), 0) };
+    }
+}
+
 /// HardFault exception handler.
 ///
-/// Dumps CPU state to NO_INIT RAM at [`NOINIT_BASE`], then enters an
+/// Dumps CPU state to linker-owned NO_INIT RAM, then enters an
 /// infinite loop. A debugger or post-mortem tool can read the dump
 /// and verify integrity via the XOR checksum.
 #[cortex_m_rt::exception]

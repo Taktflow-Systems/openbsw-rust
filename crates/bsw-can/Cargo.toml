@@ -1,17 +1,24 @@
 [package]
 name = "bsw-can"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "CAN bus abstraction for embedded BSW — Rust port of OpenBSW cpp2can"
 
 [features]
 default = ["std"]
-std = []
+std = ["bsw-time/std"]
 can-fd = []
+socketcan = ["std", "dep:libc"]
 
 [dependencies]
 bsw-estd = { path = "../bsw-estd", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2", optional = true }
 
 [lints]
 workspace = true

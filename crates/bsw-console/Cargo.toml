@@ -1,0 +1,21 @@
+[package]
+name = "bsw-console"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bounded console line editing, command registry, and async/lifecycle integration for OpenBSW Rust"
+
+[features]
+default = ["std"]
+std = ["bsw-async/std", "bsw-time/std", "bsw-lifecycle/std", "bsw-io/std"]
+
+[dependencies]
+bsw-async = { path = "../bsw-async", default-features = false }
+bsw-io = { path = "../bsw-io", default-features = false }
+bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
+
+[lints]
+workspace = true

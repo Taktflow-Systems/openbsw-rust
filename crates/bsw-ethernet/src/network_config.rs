@@ -35,7 +35,11 @@ impl NetworkConfig {
     /// Create an IPv4 configuration.
     #[inline]
     pub const fn ipv4(ip: [u8; 4], netmask: [u8; 4], gateway: [u8; 4]) -> Self {
-        Self::Ipv4 { ip, netmask, gateway }
+        Self::Ipv4 {
+            ip,
+            netmask,
+            gateway,
+        }
     }
 
     /// Create an IPv6 configuration.
@@ -113,11 +117,7 @@ mod tests {
 
     #[test]
     fn ipv4_config() {
-        let cfg = NetworkConfig::ipv4(
-            [192, 168, 1, 100],
-            [255, 255, 255, 0],
-            [192, 168, 1, 1],
-        );
+        let cfg = NetworkConfig::ipv4([192, 168, 1, 100], [255, 255, 255, 0], [192, 168, 1, 1]);
         assert!(cfg.is_valid());
     }
 
@@ -129,42 +129,26 @@ mod tests {
 
     #[test]
     fn ip_address_from_ipv4() {
-        let cfg = NetworkConfig::ipv4(
-            [192, 168, 1, 100],
-            [255, 255, 255, 0],
-            [192, 168, 1, 1],
-        );
+        let cfg = NetworkConfig::ipv4([192, 168, 1, 100], [255, 255, 255, 0], [192, 168, 1, 1]);
         assert_eq!(cfg.ip_address(), Some(IpAddress::ipv4(192, 168, 1, 100)));
     }
 
     #[test]
     fn netmask_from_ipv4() {
-        let cfg = NetworkConfig::ipv4(
-            [192, 168, 1, 100],
-            [255, 255, 255, 0],
-            [192, 168, 1, 1],
-        );
+        let cfg = NetworkConfig::ipv4([192, 168, 1, 100], [255, 255, 255, 0], [192, 168, 1, 1]);
         assert_eq!(cfg.netmask(), Some([255u8, 255, 255, 0]));
     }
 
     #[test]
     fn gateway_from_ipv4() {
-        let cfg = NetworkConfig::ipv4(
-            [192, 168, 1, 100],
-            [255, 255, 255, 0],
-            [192, 168, 1, 1],
-        );
+        let cfg = NetworkConfig::ipv4([192, 168, 1, 100], [255, 255, 255, 0], [192, 168, 1, 1]);
         assert_eq!(cfg.gateway(), Some([192u8, 168, 1, 1]));
     }
 
     #[test]
     fn broadcast_calculation() {
         // 192.168.1.100 / 255.255.255.0 → 192.168.1.255
-        let cfg = NetworkConfig::ipv4(
-            [192, 168, 1, 100],
-            [255, 255, 255, 0],
-            [192, 168, 1, 1],
-        );
+        let cfg = NetworkConfig::ipv4([192, 168, 1, 100], [255, 255, 255, 0], [192, 168, 1, 1]);
         assert_eq!(cfg.broadcast(), Some([192u8, 168, 1, 255]));
     }
 
