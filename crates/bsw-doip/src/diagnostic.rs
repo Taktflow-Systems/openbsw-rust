@@ -200,10 +200,52 @@ impl<H: Copy> ReceiveState<H> {
     }
 }
 
+/// Opaque, movable in-flight diagnostic receive state.
+///
+/// A live entity constructs one short-lived [`DiagnosticMessageHandler`]
+/// per receive cycle (the handler mutably borrows the gateway). Persisting
+/// this state per connection with
+/// [`resume`](DiagnosticMessageHandler::resume) /
+/// [`suspend`](DiagnosticMessageHandler::suspend) keeps messages that are
+/// fragmented across receive cycles intact.
+#[derive(Debug, Clone, Copy)]
+pub struct DiagnosticReceiveState<H: Copy>(Option<ReceiveState<H>>);
+
+impl<H: Copy> DiagnosticReceiveState<H> {
+    /// Empty (no message in flight).
+    pub const fn new() -> Self {
+        Self(None)
+    }
+
+    /// `true` while a partially received message is in flight.
+    pub const fn in_flight(&self) -> bool {
+        self.0.is_some()
+    }
+
+    /// Release the pool allocation of a partially received message; call
+    /// this when the owning connection is torn down.
+    pub fn cancel<G: DiagnosticGateway<Handle = H>>(&mut self, gateway: &mut G) {
+        if let Some(state) = self.0.take() {
+            if let Some(handle) = state.handle {
+                gateway.cancel(handle);
+            }
+        }
+    }
+}
+
+impl<H: Copy> Default for DiagnosticReceiveState<H> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Stateful receiver for diagnostic messages and ACKs on one TCP connection.
 ///
-/// Construct one handler per connection. After every call to
-/// `ServerTransportLayer::handle_bytes`, call [`apply_actions`](Self::apply_actions)
+/// Construct one handler per connection, or persist the in-flight state
+/// across shorter-lived handlers with
+/// [`resume`](Self::resume) / [`suspend`](Self::suspend). After every call
+/// to `ServerTransportLayer::handle_bytes`, call
+/// [`apply_actions`](Self::apply_actions)
 /// before queuing application responses; this preserves upstream's
 /// ACK-before-UDS-response ordering.
 pub struct DiagnosticMessageHandler<'a, G: DiagnosticGateway> {
@@ -242,6 +284,16 @@ impl<'a, G: DiagnosticGateway> DiagnosticMessageHandler<'a, G> {
             events: RingQueue::new(),
             dropped_actions: 0,
         }
+    }
+
+    /// Adopt a persisted in-flight receive state (live-entity path).
+    pub fn resume(&mut self, state: &mut DiagnosticReceiveState<G::Handle>) {
+        self.receive = state.0.take();
+    }
+
+    /// Persist the in-flight receive state after a receive cycle.
+    pub fn suspend(&mut self, state: &mut DiagnosticReceiveState<G::Handle>) {
+        state.0 = self.receive.take();
     }
 
     /// Remove the next deferred wire/close action.

@@ -11,6 +11,7 @@ targets=(
   com_packing
   docan_state
   doip_diagnostic
+  doip_entity
   doip_header
   doip_payload
   doip_tcp

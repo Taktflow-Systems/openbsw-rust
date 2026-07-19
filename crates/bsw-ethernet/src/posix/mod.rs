@@ -12,9 +12,11 @@
 //! polling-style contracts of the traits (upstream `cpp2ethernet` semantics)
 //! can be honoured without ever blocking the caller.
 
+pub mod stack;
 pub mod tcp;
 pub mod udp;
 
+pub use stack::PosixSocketStack;
 pub use tcp::{PosixTcpServerSocket, PosixTcpSocket};
 pub use udp::PosixUdpSocket;
 

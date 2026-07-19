@@ -127,6 +127,110 @@ pub trait SocketEventListener {
     fn on_socket_event(&mut self, socket: SocketId, event: SocketEvent);
 }
 
+/// Opaque handle identifying a datagram (UDP) socket inside a
+/// [`DatagramApi`] backend.
+///
+/// Datagram handles live in their own namespace: a [`DatagramId`] is never
+/// interchangeable with a [`SocketId`]. Backends invalidate handles on close
+/// so stale handles are rejected with [`SocketError::InvalidHandle`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DatagramId(u16);
+
+impl DatagramId {
+    /// Construct a handle from its raw backend-defined representation.
+    #[inline]
+    pub const fn from_raw(raw: u16) -> Self {
+        Self(raw)
+    }
+
+    /// The raw backend-defined representation of this handle.
+    #[inline]
+    pub const fn raw(self) -> u16 {
+        self.0
+    }
+}
+
+/// The datagram (UDP) boundary an embedded stack backend implements.
+///
+/// This is the connectionless companion of [`SocketApi`], demonstrated by
+/// production `DoIP` behavior: vehicle-discovery request/response needs
+/// nonblocking receive with the remote endpoint, and scheduled vehicle
+/// announcements need unicast, broadcast, or multicast transmission. All
+/// operations are non-blocking and heap-free; capacities (socket pool,
+/// per-socket datagram queue, maximum datagram payload) are fixed by the
+/// backend and must be documented by it.
+///
+/// # Ownership and stale handles
+///
+/// The backend owns every buffer; callers only pass borrowed slices whose
+/// content is fully consumed (copied or delivered) before the call returns.
+/// [`DatagramApi::close_datagram`] invalidates the handle; any later use
+/// must fail with [`SocketError::InvalidHandle`]. Platform adapters must
+/// uphold the same rules so protocol code cannot observe a freed resource.
+pub trait DatagramApi {
+    /// Allocate a new unbound datagram socket.
+    ///
+    /// Fails with [`SocketError::NoResources`] when the pool is exhausted.
+    fn create_datagram(&mut self) -> Result<DatagramId, SocketError>;
+
+    /// Bind the datagram socket to a local address and port (`0` selects an
+    /// ephemeral port). Fails with [`SocketError::AddressInUse`] on
+    /// conflicts and [`SocketError::InvalidState`] when already bound.
+    fn bind_datagram(
+        &mut self,
+        socket: DatagramId,
+        addr: IpAddress,
+        port: u16,
+    ) -> Result<(), SocketError>;
+
+    /// Transmit one datagram to `target` without blocking.
+    ///
+    /// `target` may be a unicast, broadcast, or multicast endpoint; the
+    /// backend performs any transport-specific setup itself. Fails with
+    /// [`SocketError::InvalidState`] when unbound, with
+    /// [`SocketError::NotConnected`] when the link is down, and with
+    /// [`SocketError::BufferFull`] when transmit resources are exhausted
+    /// (backpressure; the datagram was not sent).
+    fn send_datagram(
+        &mut self,
+        socket: DatagramId,
+        target: IpEndpoint,
+        data: &[u8],
+    ) -> Result<(), SocketError>;
+
+    /// Receive one pending datagram without blocking.
+    ///
+    /// Returns `Ok(None)` when nothing is pending, otherwise the number of
+    /// payload bytes copied into `buf` and the remote endpoint the datagram
+    /// came from. A datagram longer than `buf` is truncated to `buf.len()`
+    /// (the remainder is discarded, mirroring `recvfrom` semantics).
+    fn recv_datagram(
+        &mut self,
+        socket: DatagramId,
+        buf: &mut [u8],
+    ) -> Result<Option<(usize, IpEndpoint)>, SocketError>;
+
+    /// Local endpoint, or an unset endpoint before bind.
+    fn datagram_local_endpoint(&self, socket: DatagramId) -> Result<IpEndpoint, SocketError>;
+
+    /// Close the datagram socket and release its resources; the handle
+    /// becomes invalid.
+    fn close_datagram(&mut self, socket: DatagramId) -> Result<(), SocketError>;
+}
+
+/// Link/interface readiness observation for an embedded stack backend.
+///
+/// [`crate::network_interface::NetworkInterface`] owns interface lifecycle
+/// and configuration; this trait is the minimal read-only view protocol
+/// components need to react to link loss and recovery between polls. A
+/// backend without link management reports `true` permanently.
+pub trait LinkState {
+    /// `true` while the underlying link/interface is usable.
+    fn link_up(&self) -> bool {
+        true
+    }
+}
+
 /// The socket boundary an lwIP-style stack backend implements.
 ///
 /// All operations are non-blocking and heap-free; capacities are fixed by

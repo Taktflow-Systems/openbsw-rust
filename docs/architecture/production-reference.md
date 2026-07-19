@@ -20,3 +20,9 @@ F413 and G474 share `board_apps.rs`; only typed board tables, CAN/flash/UART
 drivers, clock parameters, linker memory, and honest capability declarations
 differ. Fixed queues and static protocol buffers make exhaustion observable.
 No C++ OpenBSW module is linked into the Rust production graph.
+
+Since the optional hardware-independent embedded DoIP tranche
+(`docs/port/embedded-doip-2026-07-19.md`), the live DoIP entity is a
+portable `no_std` core (`bsw-doip::entity::DoIpEntity`) over the generic
+bounded `bsw-ethernet` stack boundary; the POSIX entity is a thin adapter
+over that same core. No physical Ethernet platform is claimed.

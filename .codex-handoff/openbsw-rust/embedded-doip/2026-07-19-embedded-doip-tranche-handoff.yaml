@@ -1,0 +1,83 @@
+date: 2026-07-19
+project: openbsw-rust
+part: embedded-doip
+task: hardware-independent-embedded-doip-tranche
+achievement:
+  - extracted the live DoIP entity into a portable no_std allocation-free
+    core (crates/bsw-doip/src/entity.rs, DoIpEntity) covering discovery,
+    announcements, admission, routing activation, alive checks, timeouts,
+    diagnostics, ordered partial sends, backpressure, link recovery, and
+    lifecycle
+  - added generic bounded datagram and link contracts to bsw-ethernet
+    (lwip::DatagramApi, lwip::LinkState) reusing the existing SocketApi
+    for TCP; extended the deterministic FakeStack with a bounded UDP pool
+    and link injection
+  - added PosixSocketStack (SocketApi + DatagramApi + LinkState over the
+    audited std::net adapters) and rebuilt PosixDoIpEntity as a thin
+    adapter over the portable core with an unchanged public API
+  - added DiagnosticReceiveState suspend/resume so fragmented diagnostic
+    messages survive chunked receive cycles and pool allocations are
+    released on teardown
+  - deterministic embedded composition with bsw-reference-core
+    DiagnosticCore proves DoCAN and DoIP share one production UDS state
+    under bsw-lifecycle control, including restart and link-loss recovery
+  - 34-scenario deterministic behavioral suite, composition tests,
+    POSIX/embedded protocol-equivalence test, fake/POSIX boundary
+    contract tests, and a new bounded doip_entity fuzz target
+decisions_with_rationale:
+  - decision: keep the RA-plus-diagnostic same-receive-chunk source
+      snapshot behavior of the pre-tranche POSIX entity
+    rationale: behavioral parity with the closed mandatory release;
+      documented in docs/port/doip-parity.md as a known limitation
+  - decision: entity borrows the network backend per call instead of
+      owning it
+    rationale: lets deterministic tests share one fake stack between
+      entity and clients and keeps the core free of platform types
+  - decision: record the tranche in a dedicated doc instead of touching
+      parity-manifest/status totals
+    rationale: mandatory 1,092/1,092 and 37/37 totals must stay intact;
+      the tranche is optional post-release expansion
+current_state:
+  summary: implementation, tests, docs, and evidence complete as
+    uncommitted working-tree changes; host verification green; pinned
+    rust:1.94-bookworm container workspace tests green; sanitizer fuzz
+    run executed in the pinned container
+  files_touched:
+    - crates/bsw-doip/src/entity.rs
+    - crates/bsw-doip/src/entity/posix.rs
+    - crates/bsw-doip/src/diagnostic.rs
+    - crates/bsw-doip/src/lib.rs
+    - crates/bsw-doip/Cargo.toml
+    - crates/bsw-doip/tests/embedded_entity.rs
+    - crates/bsw-doip/tests/embedded_composition.rs
+    - crates/bsw-doip/tests/entity_equivalence.rs
+    - crates/bsw-ethernet/src/lwip.rs
+    - crates/bsw-ethernet/src/lwip/fake.rs
+    - crates/bsw-ethernet/src/posix/stack.rs
+    - crates/bsw-ethernet/src/posix/mod.rs
+    - crates/bsw-ethernet/tests/datagram_link.rs
+    - crates/bsw-ethernet/tests/posix_stack.rs
+    - fuzz/fuzz_targets/doip_entity.rs
+    - fuzz/Cargo.toml
+    - fuzz/Cargo.lock
+    - Cargo.lock
+    - tools/port/run_fuzz_linux.sh
+    - docs/port/doip-parity.md
+    - docs/port/ethernet-parity.md
+    - docs/port/test-guide.md
+    - docs/port/embedded-doip-2026-07-19.md
+    - docs/architecture/production-reference.md
+    - docs/test-evidence/samples/embedded-doip-2026-07-19.json
+  status:
+    - all changes uncommitted on main at the recorded checkpoint
+    - mandatory status.md, parity-manifest.json, oracle fixtures unchanged
+    - Windows-only legs (Windows workspace tests, measure_resources.ps1)
+      not runnable on this Linux host; Linux equivalents run instead and
+      recorded in the evidence file
+blockers: []
+next_steps:
+  - platform tranche: real lwIP (or other stack) backend against a pinned
+    lwIP release, MCU/PHY/MAC/DMA drivers, and physical DoIP HIL per the
+    NOT-completed list in docs/port/embedded-doip-2026-07-19.md
+  - rerun the Windows verification legs on a Windows host before any
+    release tagging

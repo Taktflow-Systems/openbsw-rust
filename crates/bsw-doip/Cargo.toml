@@ -18,6 +18,7 @@ bsw-time = { path = "../bsw-time", default-features = false }
 bsw-transport = { path = "../bsw-transport", default-features = false }
 
 [dev-dependencies]
+bsw-reference-core = { path = "../bsw-reference-core" }
 bsw-uds = { path = "../bsw-uds" }
 
 [lints]

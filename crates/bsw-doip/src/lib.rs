@@ -17,7 +17,6 @@ pub mod connection;
 pub mod constants;
 pub mod diagnostic;
 pub mod discovery;
-#[cfg(feature = "std")]
 pub mod entity;
 pub mod header;
 pub mod parameters;
@@ -38,13 +37,14 @@ pub use constants::{
 };
 pub use diagnostic::{
     DiagnosticGateway, DiagnosticHandlerAction, DiagnosticMessageHandler,
-    DiagnosticMessageListener, DiagnosticSendError, DiagnosticSendToken, DiagnosticSender,
-    DiagnosticWireFrame, PoolDiagnosticGateway, ReceivedDiagnosticAck,
+    DiagnosticMessageListener, DiagnosticReceiveState, DiagnosticSendError, DiagnosticSendToken,
+    DiagnosticSender, DiagnosticWireFrame, PoolDiagnosticGateway, ReceivedDiagnosticAck,
 };
 pub use discovery::{AnnouncementSchedule, DiscoveryEntity};
 #[cfg(feature = "std")]
+pub use entity::posix::PosixDoIpEntity;
 pub use entity::{
-    DoIpApplication, EntityAdmissionPolicy, EntityConfig, EntityError, EntityState, PosixDoIpEntity,
+    DoIpApplication, DoIpEntity, EntityAdmissionPolicy, EntityConfig, EntityError, EntityState,
 };
 pub use header::{DoIpHeader, HeaderError, HEADER_SIZE};
 pub use parameters::TransportParameters;

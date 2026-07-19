@@ -20,10 +20,23 @@ use crate::endpoint::IpEndpoint;
 use crate::ip::IpAddress;
 use crate::tcp::ConnectionCloseReason;
 
-use super::{SocketApi, SocketError, SocketEvent, SocketId, SocketState};
+use super::{
+    DatagramApi, DatagramId, LinkState, SocketApi, SocketError, SocketEvent, SocketId, SocketState,
+};
 
 /// Maximum pending (not yet accepted) connections per listening socket.
 pub const MAX_BACKLOG: usize = 4;
+
+/// Fixed number of datagram (UDP) sockets of the fake stack.
+pub const UDP_SOCKETS: usize = 4;
+
+/// Fixed per-socket receive queue depth in datagrams.
+pub const UDP_QUEUE: usize = 4;
+
+/// Fixed maximum datagram payload held by the fake stack; longer payloads
+/// are rejected by [`DatagramApi::send_datagram`] with
+/// [`SocketError::BufferFull`].
+pub const UDP_DATAGRAM_MAX: usize = 128;
 
 /// First port used for ephemeral (implicit) binds.
 const EPHEMERAL_START: u16 = 49152;
@@ -115,6 +128,86 @@ impl<const N: usize> EventQueue<N> {
     }
 }
 
+/// One buffered datagram.
+#[derive(Debug, Clone, Copy)]
+struct Datagram {
+    len: u16,
+    addr: IpAddress,
+    port: u16,
+    bytes: [u8; UDP_DATAGRAM_MAX],
+}
+
+impl Datagram {
+    const fn empty() -> Self {
+        Self {
+            len: 0,
+            addr: IpAddress::unspecified(),
+            port: 0,
+            bytes: [0; UDP_DATAGRAM_MAX],
+        }
+    }
+}
+
+/// One datagram-socket slot of the fake pool.
+#[derive(Debug, Clone, Copy)]
+struct UdpSlot {
+    used: bool,
+    generation: u8,
+    bound: bool,
+    local_addr: IpAddress,
+    local_port: u16,
+    queue: [Option<Datagram>; UDP_QUEUE],
+    queue_len: u8,
+}
+
+impl UdpSlot {
+    const fn new() -> Self {
+        Self {
+            used: false,
+            generation: 0,
+            bound: false,
+            local_addr: IpAddress::unspecified(),
+            local_port: 0,
+            queue: [None; UDP_QUEUE],
+            queue_len: 0,
+        }
+    }
+
+    fn reset_active(&mut self) {
+        self.used = true;
+        self.bound = false;
+        self.local_addr = IpAddress::unspecified();
+        self.local_port = 0;
+        self.queue = [None; UDP_QUEUE];
+        self.queue_len = 0;
+    }
+
+    /// Append one datagram; returns `false` when the queue is full.
+    fn enqueue(&mut self, datagram: Datagram) -> bool {
+        let len = usize::from(self.queue_len);
+        if len == UDP_QUEUE {
+            return false;
+        }
+        self.queue[len] = Some(datagram);
+        self.queue_len += 1;
+        true
+    }
+
+    /// Remove and return the oldest datagram.
+    fn dequeue(&mut self) -> Option<Datagram> {
+        if self.queue_len == 0 {
+            return None;
+        }
+        let item = self.queue[0];
+        for i in 1..usize::from(self.queue_len) {
+            self.queue[i - 1] = self.queue[i];
+        }
+        self.queue[usize::from(self.queue_len) - 1] = None;
+        self.queue_len -= 1;
+        item
+    }
+}
+
 /// One socket slot of the fake pool.
 #[derive(Debug, Clone, Copy)]
 struct Slot<const RX: usize> {
@@ -182,9 +275,12 @@ pub struct FakeStack<
     const EVENT_CAPACITY: usize = 32,
 > {
     slots: [Slot<RX_CAPACITY>; SOCKETS],
+    udp_slots: [UdpSlot; UDP_SOCKETS],
     events: EventQueue<EVENT_CAPACITY>,
     refuse_connect: bool,
     drop_data: bool,
+    link_up: bool,
+    dropped_datagrams: usize,
     next_ephemeral: u16,
 }
 
@@ -204,9 +300,12 @@ impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize
         }
         Self {
             slots: array::from_fn(|_| Slot::new()),
+            udp_slots: [UdpSlot::new(); UDP_SOCKETS],
             events: EventQueue::new(),
             refuse_connect: false,
             drop_data: false,
+            link_up: true,
+            dropped_datagrams: 0,
             next_ephemeral: EPHEMERAL_START,
         }
     }
@@ -240,6 +339,36 @@ impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize
     /// Number of events discarded because the event queue was full.
     pub fn dropped_events(&self) -> usize {
         self.events.dropped
+    }
+
+    /// Failure injection: model link loss and recovery. While the link is
+    /// down, [`SocketApi::connect`], [`SocketApi::send`], and
+    /// [`DatagramApi::send_datagram`] fail with
+    /// [`SocketError::NotConnected`]; already-delivered data can still be
+    /// drained. The link starts up.
+    pub fn set_link_up(&mut self, up: bool) {
+        self.link_up = up;
+    }
+
+    /// Number of datagrams silently dropped because a receive queue was
+    /// full (UDP loss semantics; exhaustion stays observable here).
+    pub fn dropped_datagrams(&self) -> usize {
+        self.dropped_datagrams
+    }
+
+    /// Validate a datagram handle and return its slot index.
+    fn resolve_udp(&self, socket: DatagramId) -> Result<usize, SocketError> {
+        let index = usize::from(socket.raw() & 0xFF);
+        let generation = (socket.raw() >> 8) as u8;
+        if index >= UDP_SOCKETS {
+            return Err(SocketError::InvalidHandle);
+        }
+        let slot = &self.udp_slots[index];
+        if slot.used && slot.generation == generation {
+            Ok(index)
+        } else {
+            Err(SocketError::InvalidHandle)
+        }
     }
 
     /// Validate a handle and return its slot index.
@@ -407,6 +536,9 @@ impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize
         if !matches!(state, SocketState::Created | SocketState::Bound) {
             return Err(SocketError::InvalidState);
         }
+        if !self.link_up {
+            return Err(SocketError::NotConnected);
+        }
         if self.refuse_connect {
             return Err(SocketError::ConnectionRefused);
         }
@@ -488,6 +620,9 @@ impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize
             SocketState::Established => {}
             SocketState::Closed => return Err(SocketError::Closed),
             _ => return Err(SocketError::NotConnected),
+        }
+        if !self.link_up {
+            return Err(SocketError::NotConnected);
         }
         if data.is_empty() {
             return Ok(0);
@@ -576,10 +711,171 @@ impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize
     }
 }
 
+impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize> DatagramApi
+    for FakeStack<SOCKETS, RX_CAPACITY, EVENT_CAPACITY>
+{
+    fn create_datagram(&mut self) -> Result<DatagramId, SocketError> {
+        for index in 0..UDP_SOCKETS {
+            if !self.udp_slots[index].used {
+                self.udp_slots[index].reset_active();
+                return Ok(make_udp_id(index, self.udp_slots[index].generation));
+            }
+        }
+        Err(SocketError::NoResources)
+    }
+
+    fn bind_datagram(
+        &mut self,
+        socket: DatagramId,
+        addr: IpAddress,
+        port: u16,
+    ) -> Result<(), SocketError> {
+        let index = self.resolve_udp(socket)?;
+        if self.udp_slots[index].bound {
+            return Err(SocketError::InvalidState);
+        }
+        if port != 0 {
+            let conflict = self.udp_slots.iter().enumerate().any(|(i, slot)| {
+                i != index
+                    && slot.used
+                    && slot.bound
+                    && slot.local_port == port
+                    && (slot.local_addr == addr
+                        || slot.local_addr.is_unspecified()
+                        || addr.is_unspecified())
+            });
+            if conflict {
+                return Err(SocketError::AddressInUse);
+            }
+        }
+        let assigned = if port == 0 {
+            self.alloc_ephemeral()
+        } else {
+            port
+        };
+        let slot = &mut self.udp_slots[index];
+        slot.bound = true;
+        slot.local_addr = addr;
+        slot.local_port = assigned;
+        Ok(())
+    }
+
+    fn send_datagram(
+        &mut self,
+        socket: DatagramId,
+        target: IpEndpoint,
+        data: &[u8],
+    ) -> Result<(), SocketError> {
+        let index = self.resolve_udp(socket)?;
+        if !self.link_up {
+            return Err(SocketError::NotConnected);
+        }
+        let Some(target_port) = target.port() else {
+            return Err(SocketError::InvalidState);
+        };
+        if data.len() > UDP_DATAGRAM_MAX {
+            return Err(SocketError::BufferFull);
+        }
+        if !self.udp_slots[index].bound {
+            // Implicit ephemeral bind, mirroring OS datagram semantics.
+            let ephemeral = self.alloc_ephemeral();
+            let slot = &mut self.udp_slots[index];
+            slot.bound = true;
+            slot.local_port = ephemeral;
+        }
+        let mut datagram = Datagram::empty();
+        datagram.len = saturate_u16(data.len());
+        datagram.addr = self.udp_slots[index].local_addr;
+        datagram.port = self.udp_slots[index].local_port;
+        datagram.bytes[..data.len()].copy_from_slice(data);
+        let target_addr = *target.address();
+        let broadcast = is_fake_broadcast(&target_addr);
+        for other in 0..UDP_SOCKETS {
+            if other == index {
+                continue;
+            }
+            let slot = &self.udp_slots[other];
+            if !(slot.used && slot.bound && slot.local_port == target_port) {
+                continue;
+            }
+            let matches = broadcast
+                || slot.local_addr == target_addr
+                || slot.local_addr.is_unspecified()
+                || target_addr.is_unspecified();
+            if !matches {
+                continue;
+            }
+            if !self.udp_slots[other].enqueue(datagram) {
+                // UDP loss semantics: drop silently but observably.
+                self.dropped_datagrams += 1;
+            }
+            if !broadcast {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn recv_datagram(
+        &mut self,
+        socket: DatagramId,
+        buf: &mut [u8],
+    ) -> Result<Option<(usize, IpEndpoint)>, SocketError> {
+        let index = self.resolve_udp(socket)?;
+        let Some(datagram) = self.udp_slots[index].dequeue() else {
+            return Ok(None);
+        };
+        let length = usize::from(datagram.len).min(buf.len());
+        buf[..length].copy_from_slice(&datagram.bytes[..length]);
+        Ok(Some((
+            length,
+            IpEndpoint::new(datagram.addr, datagram.port),
+        )))
+    }
+
+    fn datagram_local_endpoint(&self, socket: DatagramId) -> Result<IpEndpoint, SocketError> {
+        let index = self.resolve_udp(socket)?;
+        let slot = &self.udp_slots[index];
+        if slot.bound {
+            Ok(IpEndpoint::new(slot.local_addr, slot.local_port))
+        } else {
+            Ok(IpEndpoint::unset())
+        }
+    }
+
+    fn close_datagram(&mut self, socket: DatagramId) -> Result<(), SocketError> {
+        let index = self.resolve_udp(socket)?;
+        let slot = &mut self.udp_slots[index];
+        slot.used = false;
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.queue = [None; UDP_QUEUE];
+        slot.queue_len = 0;
+        Ok(())
+    }
+}
+
+impl<const SOCKETS: usize, const RX_CAPACITY: usize, const EVENT_CAPACITY: usize> LinkState
+    for FakeStack<SOCKETS, RX_CAPACITY, EVENT_CAPACITY>
+{
+    fn link_up(&self) -> bool {
+        self.link_up
+    }
+}
+
 /// Build a handle from slot index and generation (index fits in the low
 /// byte because `SOCKETS <= 256`).
 fn make_id(index: usize, generation: u8) -> SocketId {
     SocketId::from_raw((u16::from(generation) << 8) | (index as u16))
+}
+
+/// Build a datagram handle from slot index and generation.
+fn make_udp_id(index: usize, generation: u8) -> DatagramId {
+    DatagramId::from_raw((u16::from(generation) << 8) | (index as u16))
+}
+
+/// Limited-broadcast or multicast target of the fake stack.
+fn is_fake_broadcast(addr: &IpAddress) -> bool {
+    addr.is_multicast() || addr.as_bytes() == [255, 255, 255, 255]
 }
 
 /// Clamp a byte count into `u16` (event payloads carry `u16`).

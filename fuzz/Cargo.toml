@@ -14,6 +14,8 @@ bsw-can = { path = "../crates/bsw-can" }
 bsw-com = { path = "../crates/bsw-com" }
 bsw-docan = { path = "../crates/bsw-docan" }
 bsw-doip = { path = "../crates/bsw-doip" }
+bsw-ethernet = { path = "../crates/bsw-ethernet" }
+bsw-lifecycle = { path = "../crates/bsw-lifecycle" }
 bsw-estd = { path = "../crates/bsw-estd" }
 bsw-io = { path = "../crates/bsw-io" }
 bsw-uds = { path = "../crates/bsw-uds" }
@@ -65,6 +67,13 @@ bench = false
 [[bin]]
 name = "doip_tcp"
 path = "fuzz_targets/doip_tcp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doip_entity"
+path = "fuzz_targets/doip_entity.rs"
 test = false
 doc = false
 bench = false

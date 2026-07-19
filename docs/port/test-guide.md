@@ -24,9 +24,11 @@ feature. Linux additionally runs the POSIX SocketCAN/vcan and DoIP integration,
 oracle comparison, fuzz smoke, and the pinned container test. Miri uses the
 pinned nightly named in `safety-verification-2026-07-18.md`.
 
-Run all 13 fuzz targets in a Linux `rust:1.94-bookworm` container with
+Run all 14 fuzz targets in a Linux `rust:1.94-bookworm` container with
 `bash tools/port/run_fuzz_linux.sh`. The script pins the nightly toolchain and
-requires 100 libFuzzer runs for every target.
+requires 100 libFuzzer runs for every target. `doip_entity` covers the
+portable embedded DoIP entity over the deterministic fake stack boundary
+(optional embedded-DoIP tranche; see `embedded-doip-2026-07-19.md`).
 
 Authoritative HIL is never skip-capable. Run two deterministic application
 smokes, the destructive linker-bounded storage role, the queue-overflow role,

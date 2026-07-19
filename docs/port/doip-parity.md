@@ -20,6 +20,27 @@ Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`, module
 | Pinned upstream differential traces | routing activation, alive check, and diagnostic packet fixture pairs | `compare_oracle.py` normalizes and compares all three pairs in CI |
 | Malformed input and state-machine fuzzing | `doip_header`, `doip_payload`, `doip_tcp`, `doip_diagnostic` | mandatory bounded fuzz smoke targets; TCP and diagnostic targets exercise fragmented and arbitrary packet sequences |
 
+## Optional hardware-independent embedded tranche (post-release)
+
+These rows extend the closed mandatory table above; they change no
+mandatory totals. See `embedded-doip-2026-07-19.md` for the full
+completed/not-completed boundary of this tranche.
+
+| Behavior | Rust implementation | Evidence |
+|---|---|---|
+| Portable no_std live DoIP entity (protocol, discovery, announcements, admission, alive checks, timeouts, diagnostics, partial send, backpressure, link recovery, lifecycle) | `entity::DoIpEntity` over `bsw-ethernet` `SocketApi`/`DatagramApi`/`LinkState` | `embedded_entity.rs` deterministic suite (34 scenarios) |
+| POSIX entity as adapter over the portable core | `entity::posix::PosixDoIpEntity` + `PosixSocketStack` | unchanged `posix_entity.rs` plus `entity_equivalence.rs` |
+| Deterministic embedded composition with shared production UDS state and lifecycle control | `bsw-reference-core::DiagnosticCore` + `bsw-lifecycle` + `FakeStack` | `embedded_composition.rs` (DoCAN/DoIP shared state, restart, link loss) |
+| Cross-cycle fragmented diagnostic receive | `diagnostic::DiagnosticReceiveState` suspend/resume | fragmented header/payload and pool-exhaustion scenarios |
+| Host/embedded protocol equivalence | one portable core, two backends | `entity_equivalence.rs` transcript comparison |
+| Entity-level robustness fuzzing | `doip_entity` bounded fuzz target | sanitizer-backed Linux fuzz smoke |
+
+Known preserved limitation: a routing activation and a diagnostic message
+arriving in the same receive chunk still validate the diagnostic source
+against the chunk-start snapshot (parity with the pre-tranche POSIX
+entity); activation and diagnostics in separate receive cycles are
+unaffected.
+
 The vectors are grounded in the pinned upstream suites under
 `libs/bsw/doip/test/src/doip/common` and `libs/bsw/doip/test/src/doip/server`,
 particularly header, payload send-job, UDP connection, vehicle-identification,

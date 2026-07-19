@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "evidence_id": "embedded-doip-tranche-2026-07-19",
+  "package_ids": ["OPT-DOIP-EMB"],
+  "started_at": "2026-07-19T00:00:00Z",
+  "source": {
+    "rust_revision": "working-tree",
+    "openbsw_revision": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+  },
+  "environment": {
+    "os": "ubuntu-24.04 (Linux host; container legs in rust:1.94-bookworm)",
+    "rust": "1.94.0",
+    "python": "3.12.3",
+    "notes": [
+      "Windows workspace-test leg not runnable in this Linux environment; substituted by the Linux host all-features workspace run plus the pinned rust:1.94-bookworm container workspace run (both green).",
+      "tools/port/measure_resources.ps1 is PowerShell/Windows-only and was not run; portable composition sizes are test-enforced instead (DoIpEntity<..,6,6,6,64> = 8880 bytes, FakeStack<16,512,32> = 11568 bytes, host x86-64).",
+      "Miri not run: this tranche adds no unsafe code and tools/port/inventory_unsafe.py --check confirms the unsafe inventory is unchanged.",
+      "Physical HIL is out of scope for this hardware-independent tranche; see docs/port/embedded-doip-2026-07-19.md for the NOT-completed platform list."
+    ]
+  },
+  "commands": [
+    "cargo fmt --all -- --check",
+    "cargo test --workspace --exclude bsw-bsp-stm32 --all-features --locked",
+    "docker run rust:1.94-bookworm cargo test --workspace --exclude bsw-bsp-stm32 --all-features --locked",
+    "cargo clippy --workspace --exclude bsw-bsp-stm32 --all-targets --all-features --locked -- -D warnings",
+    "python tools/port/check_no_std.py",
+    "python tools/port/check_dependencies.py",
+    "python tools/port/check_features.py",
+    "python tools/port/check_stm32_examples.py",
+    "python tools/port/inventory_unsafe.py --check",
+    "python tools/port/generate_status.py --check docs/port/status.md",
+    "python tools/port/generate_sbom.py --output docs/port/sbom.cdx.json --check",
+    "python tools/port/validate_evidence.py",
+    "python tools/port/check_privacy.py",
+    "cargo deny check licenses advisories bans sources",
+    "python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-alive-openbsw.json docs/port/oracle-fixtures/doip-alive-rust.json",
+    "python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-diagnostic-openbsw.json docs/port/oracle-fixtures/doip-diagnostic-rust.json",
+    "python tools/port/compare_oracle.py docs/port/oracle-fixtures/doip-routing-openbsw.json docs/port/oracle-fixtures/doip-routing-rust.json",
+    "docker run rust:1.94-bookworm bash tools/port/run_fuzz_linux.sh"
+  ],
+  "results": {
+    "outcome": "passed",
+    "passed": 18,
+    "failed": 0,
+    "skipped": 4,
+    "errors": 0
+  },
+  "artifacts": []
+}

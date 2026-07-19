@@ -105,6 +105,7 @@ version = "0.1.0"
 dependencies = [
  "bsw-ethernet",
  "bsw-lifecycle",
+ "bsw-reference-core",
  "bsw-time",
  "bsw-transport",
  "bsw-uds",

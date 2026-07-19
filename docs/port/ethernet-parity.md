@@ -50,6 +50,34 @@ backpressure, failure injection (refused connects, dropped data, injected
 errors), and generation-checked handles; contract suite in
 `crates/bsw-ethernet/tests/lwip_fake.rs`.
 
+## Embedded datagram and link extensions (optional embedded-DoIP tranche)
+
+Demonstrated by production DoIP behavior (discovery request/response with
+remote-endpoint reporting; unicast/broadcast vehicle announcements; link
+loss and recovery), the boundary gained two `no_std`, allocation-free
+traits in `lwip.rs`:
+
+- `lwip::DatagramApi` with its own `DatagramId` handle namespace —
+  nonblocking UDP create/bind/close, unicast/broadcast/multicast
+  transmission, receive with remote endpoint, truncation semantics,
+  explicit backend-documented capacities, and stale-handle rejection;
+- `lwip::LinkState` — minimal read-only link/interface readiness view
+  (`NetworkInterface` remains the lifecycle owner).
+
+`FakeStack` implements both deterministically with fixed capacities
+(`UDP_SOCKETS`, `UDP_QUEUE`, `UDP_DATAGRAM_MAX`), observable receive-queue
+loss (`dropped_datagrams`), and link-loss injection (`set_link_up`);
+contract suite in `crates/bsw-ethernet/tests/datagram_link.rs`.
+
+`posix::stack::PosixSocketStack` (std only) implements
+`SocketApi + DatagramApi + LinkState` over the audited POSIX adapters so
+host compositions drive the same portable protocol code as embedded
+backends; fixed TCP/UDP slot pools, generation-checked handles, bounded
+event queue, documented `std::net` limitations; conformance suite in
+`crates/bsw-ethernet/tests/posix_stack.rs`. No real lwIP backend is
+claimed: a platform adapter must compile and test against a pinned lwIP
+implementation before any such claim is made.
+
 ## Network lifecycle integration (D21)
 
 `network_interface::NetworkInterface` composes a backend, bounded
