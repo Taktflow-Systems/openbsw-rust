@@ -34,8 +34,14 @@ def validate(path: Path) -> list[str]:
         if not isinstance(result.get(field), int) or result.get(field, -1) < 0:
             errors.append(f"results.{field} must be a non-negative integer")
     for artifact in doc.get("artifacts", []):
-        if not artifact.get("name") or not SHA256.fullmatch(artifact.get("sha256", "")):
-            errors.append("each artifact needs a name and lowercase SHA-256")
+        digest_ok = SHA256.fullmatch(artifact.get("sha256", "")) is not None
+        private_ref_ok = re.fullmatch(
+            r"private-ci-artifact:[a-z0-9._-]+", artifact.get("identity_ref", "")
+        ) is not None
+        if not artifact.get("name") or digest_ok == private_ref_ok:
+            errors.append(
+                "each artifact needs exactly one lowercase SHA-256 or private identity reference"
+            )
     serialized = json.dumps(doc).lower()
     for forbidden in ("c:\\users\\", "/home/", "password", "access_token", "secret_key"):
         if forbidden in serialized:
@@ -44,7 +50,13 @@ def validate(path: Path) -> list[str]:
 
 
 def main() -> int:
-    paths = [Path(arg) for arg in sys.argv[1:]] or sorted(Path("docs/test-evidence/samples").glob("*.json"))
+    paths = [Path(arg) for arg in sys.argv[1:]]
+    if not paths:
+        paths = sorted(Path("docs/test-evidence/samples").glob("*.json"))
+        final_matrix = Path("docs/test-evidence/samples/g12-i09-final-matrix.json")
+        if final_matrix not in paths:
+            print(f"missing required evidence: {final_matrix}", file=sys.stderr)
+            return 1
     failed = False
     for path in paths:
         errors = validate(path)

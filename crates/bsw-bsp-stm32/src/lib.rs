@@ -29,6 +29,7 @@ pub mod board_apps;
 pub mod can_health;
 pub mod can_isr;
 pub mod diag_can;
+pub mod dynamic_client;
 #[cfg(target_arch = "arm")]
 pub mod fault;
 pub mod gpio;
@@ -38,6 +39,9 @@ pub mod interrupt;
 mod mmio;
 pub mod pwm;
 pub mod reset;
+pub mod resource_contract;
+#[cfg(target_arch = "arm")]
+pub mod safety_hw;
 #[cfg(target_arch = "arm")]
 pub mod scheduler;
 pub mod timer;
@@ -61,7 +65,7 @@ pub mod can_fdcan;
 pub mod clock_g4;
 #[cfg(feature = "stm32g474")]
 pub mod flash_g4;
-#[cfg(all(target_arch = "arm", feature = "stm32g474"))]
+#[cfg(all(target_arch = "arm", any(feature = "stm32f413", feature = "stm32g474")))]
 pub mod storage_conformance;
 #[cfg(feature = "stm32g474")]
 pub mod storage_g4;

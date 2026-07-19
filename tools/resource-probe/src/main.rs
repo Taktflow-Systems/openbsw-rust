@@ -4,6 +4,8 @@ use std::time::Instant;
 
 use bsw_bsp_stm32::can_health::CanHealth;
 use bsw_bsp_stm32::can_isr::InterruptQueue;
+use bsw_bsp_stm32::dynamic_client::DynamicClientRegistry;
+use bsw_bsp_stm32::resource_contract;
 use bsw_bsp_stm32::timer::CycleAccumulator;
 use bsw_can::CanFrame;
 use bsw_console::Console;
@@ -14,12 +16,14 @@ use bsw_io::MemoryQueue;
 use bsw_logger::buffer::BufferedLogger;
 use bsw_logger::{bsw_log, ComponentId, Level, LevelFilter, Log};
 use bsw_middleware::message::Message as MiddlewareMessage;
+use bsw_reference_core::ReferenceCore;
 use bsw_time::{FakeClock, TimerQueue};
 use bsw_transport::pool::MessagePool;
 use bsw_uds::connection::ConnectionPool;
 use bsw_util::crc::CRC32_ETHERNET;
 
 fn main() {
+    trait ProbeClient {}
     const BYTES: usize = 1024 * 1024;
     const ITERATIONS: usize = 16;
     let data = vec![0xA5_u8; BYTES];
@@ -85,7 +89,19 @@ fn main() {
             "\"docan_rx_4095\":{},\"uds_connections_4x4095\":{},",
             "\"middleware_message_256\":{},\"doip_discovery_entity\":{},",
             "\"stm32_can_interrupt_queue_32\":{},",
-            "\"stm32_cycle_accumulator\":{},\"stm32_can_health\":{}",
+            "\"stm32_cycle_accumulator\":{},\"stm32_can_health\":{},",
+            "\"reference_core\":{},\"stm32_diag_static_buffers\":{},",
+            "\"dynamic_client_8x4\":{}",
+            "}},\"queues\":{{",
+            "\"f413_can_rx_frames\":{},\"g474_can_rx_frames\":{},",
+            "\"console_tx_bytes\":{},\"diagnostic_payload_bytes\":{},",
+            "\"diagnostic_response_bytes\":{}",
+            "}},\"timing\":{{",
+            "\"reference_cycle_us\":{},\"heartbeat_period_us\":{},",
+            "\"can_bus_off_recovery_ms\":{},\"uds_response_ms\":{},",
+            "\"watchdog_fast_test_reset_ms\":{},",
+            "\"watchdog_fast_test_deadline_ms\":{},",
+            "\"bounded_soak_minutes\":{}",
             "}},\"benchmarks\":{{\"crc32_bytes_per_second\":{},",
             "\"fixed_vec_ops_per_second\":{},",
             "\"disabled_log_ops_per_second\":{}}}}}"
@@ -107,6 +123,21 @@ fn main() {
         size_of::<InterruptQueue<32>>(),
         size_of::<CycleAccumulator>(),
         size_of::<CanHealth>(),
+        size_of::<ReferenceCore>(),
+        bsw_bsp_stm32::diag_can::STATIC_PROTOCOL_BUFFER_BYTES,
+        size_of::<DynamicClientRegistry<'static, dyn ProbeClient, 8, 4>>(),
+        resource_contract::F413_CAN_RX_FRAMES,
+        resource_contract::G474_CAN_RX_FRAMES,
+        resource_contract::CONSOLE_TX_BYTES,
+        resource_contract::DIAGNOSTIC_PAYLOAD_BYTES,
+        resource_contract::DIAGNOSTIC_RESPONSE_BYTES,
+        resource_contract::REFERENCE_CYCLE_US,
+        resource_contract::HEARTBEAT_PERIOD_US,
+        resource_contract::CAN_BUS_OFF_RECOVERY_MS,
+        resource_contract::UDS_RESPONSE_MS,
+        resource_contract::WATCHDOG_FAST_TEST_RESET_MS,
+        resource_contract::WATCHDOG_FAST_TEST_DEADLINE_MS,
+        resource_contract::BOUNDED_SOAK_MINUTES,
         crc_bytes_per_second,
         vector_ops_per_second,
         disabled_log_ops_per_second,

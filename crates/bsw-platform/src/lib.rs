@@ -52,6 +52,8 @@ pub enum WatchdogError {
     UnsupportedTimeout,
     /// The watchdog is already running and cannot be reconfigured.
     AlreadyRunning,
+    /// The watchdog hardware did not acknowledge configuration in time.
+    HardwareFault,
 }
 
 /// Hardware or simulated watchdog.

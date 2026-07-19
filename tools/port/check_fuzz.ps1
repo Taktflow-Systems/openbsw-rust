@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$FuzzToolchain = "nightly-2026-03-14"
 
 # MSVC fuzz binaries load the AddressSanitizer runtime dynamically. Visual
 # Studio installs it beside the compiler rather than on the default PATH.
@@ -45,7 +46,7 @@ $targets = @(
 )
 
 foreach ($target in $targets) {
-    & cargo +nightly fuzz run $target -- "-runs=$Runs"
+    & cargo "+$FuzzToolchain" fuzz run $target -- "-runs=$Runs"
     if ($LASTEXITCODE -ne 0) {
         throw "Fuzz smoke failed for $target"
     }

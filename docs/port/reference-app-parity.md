@@ -1,4 +1,4 @@
-# POSIX reference-application parity - packages F01-F10
+# Shared reference-application parity - packages F01-G15
 
 Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`,
 `executables/referenceApp` and `platforms/posix`.
@@ -33,3 +33,10 @@ Intentional platform differences are explicit:
 
 These differences do not weaken protocol packet parity, which is covered by
 the DoCAN, UDS, and DoIP fixture suites separately.
+
+`bsw-reference-core` is the heap-free common application state used by POSIX,
+F413 and G474. Both MCU production examples select `DemoRole::Application` and
+compose the same lifecycle, I/O cycle, diagnostic router, static storage and
+watchdog behavior in `board_apps.rs`. Dynamic diagnostic clients use the typed
+fixed-capacity registry in `dynamic_client.rs`. No embedded example contains an
+inline ISO-TP or UDS implementation.

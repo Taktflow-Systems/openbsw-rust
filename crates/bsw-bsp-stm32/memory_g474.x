@@ -11,3 +11,7 @@ MEMORY
 _noinit_start = ORIGIN(NOINIT);
 _storage_start = ORIGIN(STORAGE);
 _storage_end = ORIGIN(STORAGE) + LENGTH(STORAGE);
+
+ASSERT(ORIGIN(STORAGE) == 0x0807E000, "G474 storage origin changed");
+ASSERT(LENGTH(STORAGE) == 0x00002000, "G474 storage size changed");
+ASSERT(ORIGIN(NOINIT) + LENGTH(NOINIT) == ORIGIN(RAM) + LENGTH(RAM) + LENGTH(NOINIT), "G474 NOINIT must remain at top of SRAM");

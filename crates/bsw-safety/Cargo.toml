@@ -1,0 +1,18 @@
+[package]
+name = "bsw-safety"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+std = []
+
+[dependencies]
+bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
+bsw-util = { path = "../bsw-util", default-features = false }
+
+[lints]
+workspace = true

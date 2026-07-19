@@ -1,4 +1,9 @@
 /target
 /tools/resource-probe/target/
+target/private-evidence/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.pytest_cache/
 *.exe
 *.pdb

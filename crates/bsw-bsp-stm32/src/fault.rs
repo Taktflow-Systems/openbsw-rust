@@ -18,6 +18,11 @@ pub const DUMP_SIZE: usize = 0x140;
 
 /// Number of stack-content bytes captured after the exception frame.
 pub const STACK_CAPTURE_BYTES: usize = 240;
+const SAFETY_EVENT_OFFSET: usize = DUMP_SIZE;
+const WATCHDOG_TEST_OFFSET: usize =
+    SAFETY_EVENT_OFFSET + bsw_safety::RetainedSafetyEvent::ENCODED_LEN;
+const STORAGE_CAMPAIGN_OFFSET: usize =
+    WATCHDOG_TEST_OFFSET + bsw_safety::RetainedWatchdogFastTest::ENCODED_LEN;
 
 /// Fault dump structure layout offsets (in 32-bit word indices).
 #[allow(dead_code)]
@@ -128,6 +133,156 @@ unsafe fn write_fault_dump(ef: &cortex_m_rt::ExceptionFrame) {
         checksum ^= unsafe { ptr::read_volatile(dump.add(i)) };
     }
     unsafe { ptr::write_volatile(dump.add(offset::CHECKSUM), checksum) };
+
+    let retained = bsw_safety::RetainedSafetyEvent {
+        code: bsw_safety::SafetyEventCode::HardFault as u16,
+        detail: (ef.pc() & 0xffff) as u16,
+        timestamp_ns: 0,
+    };
+    write_retained_safety_event(retained);
+}
+
+fn safety_event_ptr() -> *mut u8 {
+    core::ptr::addr_of_mut!(_noinit_start)
+        .cast::<u8>()
+        .wrapping_add(SAFETY_EVENT_OFFSET)
+}
+
+/// Store a versioned, CRC-protected event in linker-owned no-init RAM.
+pub fn write_retained_safety_event(event: bsw_safety::RetainedSafetyEvent) {
+    let encoded = event.encode();
+    for (index, byte) in encoded.iter().copied().enumerate() {
+        // SAFETY: offset 320..344 is inside the exclusive 1 KiB NOINIT region.
+        unsafe { ptr::write_volatile(safety_event_ptr().add(index), byte) };
+    }
+}
+
+/// Validate and return the retained safety event without clearing it.
+pub fn retained_safety_event() -> Option<bsw_safety::RetainedSafetyEvent> {
+    let mut encoded = [0u8; bsw_safety::RetainedSafetyEvent::ENCODED_LEN];
+    for (index, byte) in encoded.iter_mut().enumerate() {
+        // SAFETY: offset 320..344 is inside the exclusive 1 KiB NOINIT region.
+        *byte = unsafe { ptr::read_volatile(safety_event_ptr().add(index)) };
+    }
+    bsw_safety::RetainedSafetyEvent::decode(&encoded)
+}
+
+/// Clear the retained event only after durable handoff.
+pub fn clear_retained_safety_event() {
+    for index in 0..bsw_safety::RetainedSafetyEvent::ENCODED_LEN {
+        // SAFETY: offset 320..344 is inside the exclusive 1 KiB NOINIT region.
+        unsafe { ptr::write_volatile(safety_event_ptr().add(index), 0) };
+    }
+}
+
+fn watchdog_test_ptr() -> *mut u8 {
+    core::ptr::addr_of_mut!(_noinit_start)
+        .cast::<u8>()
+        .wrapping_add(WATCHDOG_TEST_OFFSET)
+}
+
+pub fn write_retained_watchdog_test(state: bsw_safety::RetainedWatchdogFastTest) {
+    let encoded = state.encode();
+    for (index, byte) in encoded.iter().copied().enumerate() {
+        // SAFETY: this record follows the safety event inside exclusive NOINIT.
+        unsafe { ptr::write_volatile(watchdog_test_ptr().add(index), byte) };
+    }
+}
+
+pub fn retained_watchdog_test() -> Option<bsw_safety::RetainedWatchdogFastTest> {
+    let mut encoded = [0u8; bsw_safety::RetainedWatchdogFastTest::ENCODED_LEN];
+    for (index, byte) in encoded.iter_mut().enumerate() {
+        // SAFETY: this record follows the safety event inside exclusive NOINIT.
+        *byte = unsafe { ptr::read_volatile(watchdog_test_ptr().add(index)) };
+    }
+    bsw_safety::RetainedWatchdogFastTest::decode(&encoded)
+}
+
+pub fn clear_retained_watchdog_test() {
+    for index in 0..bsw_safety::RetainedWatchdogFastTest::ENCODED_LEN {
+        // SAFETY: this record follows the safety event inside exclusive NOINIT.
+        unsafe { ptr::write_volatile(watchdog_test_ptr().add(index), 0) };
+    }
+}
+
+const STORAGE_CAMPAIGN_MAGIC: u32 = 0x4a43_414d;
+const STORAGE_CAMPAIGN_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetainedStorageCampaign {
+    pub board: u8,
+    pub cut_index: u8,
+    pub pending_recovery: bool,
+    pub wear: [u16; 2],
+}
+
+impl RetainedStorageCampaign {
+    const ENCODED_LEN: usize = 16;
+
+    fn encode(self) -> [u8; Self::ENCODED_LEN] {
+        use bsw_util::crc::CRC32_ETHERNET;
+        let mut out = [0u8; Self::ENCODED_LEN];
+        out[0..4].copy_from_slice(&STORAGE_CAMPAIGN_MAGIC.to_le_bytes());
+        out[4] = STORAGE_CAMPAIGN_VERSION;
+        out[5] = self.board;
+        out[6] = self.cut_index;
+        out[7] = u8::from(self.pending_recovery);
+        out[8..10].copy_from_slice(&self.wear[0].to_le_bytes());
+        out[10..12].copy_from_slice(&self.wear[1].to_le_bytes());
+        let crc = CRC32_ETHERNET.checksum(&out[..12]);
+        out[12..16].copy_from_slice(&crc.to_le_bytes());
+        out
+    }
+
+    fn decode(bytes: &[u8; Self::ENCODED_LEN]) -> Option<Self> {
+        use bsw_util::crc::CRC32_ETHERNET;
+        if u32::from_le_bytes(bytes[0..4].try_into().ok()?) != STORAGE_CAMPAIGN_MAGIC
+            || bytes[4] != STORAGE_CAMPAIGN_VERSION
+            || u32::from_le_bytes(bytes[12..16].try_into().ok()?)
+                != CRC32_ETHERNET.checksum(&bytes[..12])
+        {
+            return None;
+        }
+        Some(Self {
+            board: bytes[5],
+            cut_index: bytes[6],
+            pending_recovery: bytes[7] == 1,
+            wear: [
+                u16::from_le_bytes([bytes[8], bytes[9]]),
+                u16::from_le_bytes([bytes[10], bytes[11]]),
+            ],
+        })
+    }
+}
+
+fn storage_campaign_ptr() -> *mut u8 {
+    core::ptr::addr_of_mut!(_noinit_start)
+        .cast::<u8>()
+        .wrapping_add(STORAGE_CAMPAIGN_OFFSET)
+}
+
+pub fn write_retained_storage_campaign(state: RetainedStorageCampaign) {
+    let encoded = state.encode();
+    for (index, byte) in encoded.iter().copied().enumerate() {
+        // SAFETY: the record is inside the exclusive linker-owned NOINIT area.
+        unsafe { ptr::write_volatile(storage_campaign_ptr().add(index), byte) };
+    }
+}
+
+pub fn retained_storage_campaign() -> Option<RetainedStorageCampaign> {
+    let mut encoded = [0u8; RetainedStorageCampaign::ENCODED_LEN];
+    for (index, byte) in encoded.iter_mut().enumerate() {
+        // SAFETY: the record is inside the exclusive linker-owned NOINIT area.
+        *byte = unsafe { ptr::read_volatile(storage_campaign_ptr().add(index)) };
+    }
+    RetainedStorageCampaign::decode(&encoded)
+}
+
+pub fn clear_retained_storage_campaign() {
+    for index in 0..RetainedStorageCampaign::ENCODED_LEN {
+        // SAFETY: the record is inside the exclusive linker-owned NOINIT area.
+        unsafe { ptr::write_volatile(storage_campaign_ptr().add(index), 0) };
+    }
 }
 
 /// Validate the retained dump after reset without changing it.
@@ -155,15 +310,11 @@ pub fn clear_fault_dump() {
 
 /// HardFault exception handler.
 ///
-/// Dumps CPU state to linker-owned NO_INIT RAM, then enters an
-/// infinite loop. A debugger or post-mortem tool can read the dump
-/// and verify integrity via the XOR checksum.
+/// Dumps CPU state to linker-owned NO_INIT RAM, then requests reset so startup
+/// can validate and persist the record.
 #[cortex_m_rt::exception]
 #[allow(non_snake_case)]
 unsafe fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
     unsafe { write_fault_dump(ef) };
-
-    loop {
-        cortex_m::asm::bkpt();
-    }
+    cortex_m::peripheral::SCB::sys_reset()
 }

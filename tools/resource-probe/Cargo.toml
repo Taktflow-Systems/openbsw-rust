@@ -15,6 +15,7 @@ bsw-estd = { path = "../../crates/bsw-estd" }
 bsw-io = { path = "../../crates/bsw-io" }
 bsw-logger = { path = "../../crates/bsw-logger" }
 bsw-middleware = { path = "../../crates/bsw-middleware" }
+bsw-reference-core = { path = "../../crates/bsw-reference-core" }
 bsw-time = { path = "../../crates/bsw-time" }
 bsw-transport = { path = "../../crates/bsw-transport" }
 bsw-uds = { path = "../../crates/bsw-uds" }

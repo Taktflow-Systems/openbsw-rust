@@ -22,7 +22,7 @@
 //! - RX FIFO and TX buffer elements on STM32G4 are 18 words (72 bytes) each,
 //!   not 4 words (16 bytes) as in classic M_CAN.
 //! - RXF0S fill-level field is 4 bits [3:0]; get-index is 2 bits [9:8].
-//! - TXFQS put-index field is 2 bits [9:8] (max 3 elements).
+//! - TXFQS put-index field is 2 bits [17:16] (max 3 elements).
 //!
 //! # Message RAM layout (FDCAN1, SRAMCAN base 0x4000_A400)
 //!
@@ -78,6 +78,31 @@ const FDCAN1_BASE: usize = 0x4000_6400;
 
 /// Message RAM base address for all FDCAN instances (RM0440 §44.3.3).
 const SRAMCAN_BASE: usize = 0x4000_A400;
+
+/// Reset and clock-control register block.
+const RCC_BASE: usize = 0x4002_1000;
+/// GPIOA register block (PA11/PA12 carry FDCAN1 RX/TX on AF9).
+const GPIOA_BASE: usize = 0x4800_0000;
+
+const RCC_APB1RSTR1_OFFSET: usize = 0x038;
+const RCC_AHB2ENR_OFFSET: usize = 0x04C;
+const RCC_APB1ENR1_OFFSET: usize = 0x058;
+const RCC_CCIPR_OFFSET: usize = 0x088;
+
+const RCC_FDCANRST: u32 = 1 << 25;
+const RCC_GPIOAEN: u32 = 1 << 0;
+const RCC_FDCANEN: u32 = 1 << 25;
+const RCC_FDCANSEL_MASK: u32 = 0b11 << 24;
+const RCC_FDCANSEL_PCLK1: u32 = 0b10 << 24;
+
+const GPIO_MODER_OFFSET: usize = 0x00;
+const GPIO_OTYPER_OFFSET: usize = 0x04;
+const GPIO_OSPEEDR_OFFSET: usize = 0x08;
+const GPIO_PUPDR_OFFSET: usize = 0x0C;
+const GPIO_AFRH_OFFSET: usize = 0x24;
+
+/// A dead or unclocked FDCAN must return an error instead of hanging startup.
+const MAX_INIT_POLLS: u32 = 1_000_000;
 
 // ---------------------------------------------------------------------------
 // FDCAN1 register offsets (byte offsets from FDCAN1_BASE)
@@ -184,6 +209,8 @@ const NBTP_500KBPS: u32 = {
 
 /// RF0N — RX FIFO 0 new message interrupt.
 const IR_RF0N: u32 = 1 << 0;
+/// RF0L - RX FIFO 0 message lost interrupt.
+const IR_RF0L: u32 = 1 << 3;
 /// TC — transmission completed interrupt.
 const IR_TC: u32 = 1 << 9;
 /// BO — bus-off status changed interrupt.
@@ -204,12 +231,12 @@ const PSR_EP: u32 = 1 << 5;
 // FDCAN_TXFQS bit masks
 // ---------------------------------------------------------------------------
 
-/// TFFL[5:0] — TX FIFO free level.
+/// TFFL[2:0] — TX FIFO free level.
 #[allow(dead_code)]
-const TXFQS_TFFL_MASK: u32 = 0x3F;
-/// TFQPI[9:8] — TX FIFO/queue put index (STM32G4: 2-bit field, max 3 entries).
-const TXFQS_TFQPI_MASK: u32 = 0x3 << 8;
-const TXFQS_TFQPI_SHIFT: u32 = 8;
+const TXFQS_TFFL_MASK: u32 = 0x7;
+/// TFQPI[17:16] — TX FIFO/queue put index (STM32G4: 2-bit field, max 3 entries).
+const TXFQS_TFQPI_MASK: u32 = 0x3 << 16;
+const TXFQS_TFQPI_SHIFT: u32 = 16;
 /// TFQF — TX FIFO/queue full.
 const TXFQS_TFQF: u32 = 1 << 21;
 
@@ -219,6 +246,7 @@ const TXFQS_TFQF: u32 = 1 << 21;
 
 /// F0FL[3:0] — RX FIFO 0 fill level (STM32G4: 4-bit field [3:0], not 7-bit).
 const RXF0S_F0FL_MASK: u32 = 0xF;
+const RXF0S_RF0L: u32 = 1 << 25;
 /// F0GI[9:8] — RX FIFO 0 get index (STM32G4: 2-bit field [9:8], not 6-bit [13:8]).
 const RXF0S_F0GI_MASK: u32 = 0x3 << 8;
 const RXF0S_F0GI_SHIFT: u32 = 8;
@@ -288,7 +316,7 @@ unsafe fn mram_write(addr: usize, val: u32) {
 // ---------------------------------------------------------------------------
 
 /// RX software ring-buffer depth.
-pub const RX_QUEUE_SIZE: usize = 16;
+pub const RX_QUEUE_SIZE: usize = crate::resource_contract::G474_CAN_RX_FRAMES;
 use crate::can_isr::InterruptQueue;
 
 /// TX buffer count in message RAM (hardware limit).
@@ -320,6 +348,7 @@ pub struct FdCanTransceiver {
     base: AbstractTransceiver<8>,
     /// Software RX ring-buffer (frames copied out of message RAM in the ISR).
     rx_queue: InterruptQueue<RX_QUEUE_SIZE>,
+    hardware_dropped: u32,
     health: CanHealth,
 }
 
@@ -340,6 +369,7 @@ impl FdCanTransceiver {
         Self {
             base: AbstractTransceiver::new(bus_id),
             rx_queue: InterruptQueue::new(),
+            hardware_dropped: 0,
             health: CanHealth::new(bsw_time::Duration::from_nanos(1_000_000_000)),
         }
     }
@@ -350,7 +380,12 @@ impl FdCanTransceiver {
         const ERROR_FLAGS: u32 = (1 << 22) | (1 << 23) | (1 << 25) | (1 << 28);
         // SAFETY: FDCAN1 is uniquely owned by this driver.
         let raw = unsafe { reg_read(FDCAN1_BASE, FDCAN_IR_OFFSET) };
-        let flags = CanInterruptFlags::from_fdcan_ir(raw);
+        let mut flags = CanInterruptFlags::from_fdcan_ir(raw);
+        // PSR carries the persistent state even if an earlier W1C access
+        // consumed the corresponding edge in IR.
+        let protocol_status = unsafe { reg_read(FDCAN1_BASE, FDCAN_PSR_OFFSET) };
+        flags.bus_off |= protocol_status & PSR_BO != 0;
+        flags.error_passive |= protocol_status & PSR_EP != 0;
         if raw & ERROR_FLAGS != 0 {
             // SAFETY: IR is W1C; only observed error bits are acknowledged.
             unsafe { reg_write(FDCAN1_BASE, FDCAN_IR_OFFSET, raw & ERROR_FLAGS) };
@@ -364,6 +399,24 @@ impl FdCanTransceiver {
             let _ = self.open();
             self.base.set_transceiver_state(TransceiverState::Active);
         }
+    }
+
+    /// Total frames rejected because the bounded ISR queue was full.
+    #[must_use]
+    pub fn rx_dropped(&self) -> u32 {
+        self.rx_queue
+            .dropped()
+            .saturating_add(self.hardware_dropped)
+    }
+
+    /// Connect or isolate the physical CAN TX alternate-function pin.
+    ///
+    /// This is reserved for controlled HIL bus-off injection. RX remains
+    /// connected so the controller observes the missing acknowledgement.
+    pub fn set_tx_connected_for_test(&mut self, connected: bool) {
+        let mode = if connected { 0b10 << 24 } else { 0 };
+        // SAFETY: the typed driver uniquely owns FDCAN1's configured PA12 pin.
+        unsafe { reg_modify(GPIOA_BASE, GPIO_MODER_OFFSET, 0b11 << 24, mode) };
     }
 
     // -----------------------------------------------------------------------
@@ -392,6 +445,12 @@ impl FdCanTransceiver {
     /// Must be called with FDCAN1 interrupt line masked (or from within the
     /// FDCAN1 ISR) to avoid concurrent access to `rx_queue`.
     pub unsafe fn isr_rx_fifo0(&mut self) {
+        // RF0L is W1C and means the finite hardware FIFO discarded a frame.
+        let interrupt_status = unsafe { reg_read(FDCAN1_BASE, FDCAN_IR_OFFSET) };
+        let fifo_status = unsafe { reg_read(FDCAN1_BASE, FDCAN_RXF0S_OFFSET) };
+        if interrupt_status & IR_RF0L != 0 || fifo_status & RXF0S_RF0L != 0 {
+            self.hardware_dropped = self.hardware_dropped.saturating_add(1);
+        }
         loop {
             // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
             let rxf0s = unsafe { reg_read(FDCAN1_BASE, FDCAN_RXF0S_OFFSET) };
@@ -446,36 +505,91 @@ impl FdCanTransceiver {
 
         // Clear RF0N and TC interrupt flags (write-1-to-clear).
         // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
-        unsafe { reg_write(FDCAN1_BASE, FDCAN_IR_OFFSET, IR_RF0N | IR_TC) };
+        unsafe { reg_write(FDCAN1_BASE, FDCAN_IR_OFFSET, IR_RF0N | IR_RF0L | IR_TC) };
     }
 
     // -----------------------------------------------------------------------
     // Internal hardware helpers
     // -----------------------------------------------------------------------
 
+    /// Enable and reset FDCAN1, select its 170 MHz PCLK1 kernel clock, and
+    /// configure PA11/PA12 for FDCAN1 AF9.
+    unsafe fn configure_clock_and_gpio() {
+        // SAFETY: all addresses are STM32G474 RCC/GPIO registers and this is
+        // called once from the unique board owner during startup.
+        unsafe {
+            reg_modify(RCC_BASE, RCC_AHB2ENR_OFFSET, 0, RCC_GPIOAEN);
+            reg_modify(
+                RCC_BASE,
+                RCC_CCIPR_OFFSET,
+                RCC_FDCANSEL_MASK,
+                RCC_FDCANSEL_PCLK1,
+            );
+            reg_modify(RCC_BASE, RCC_APB1ENR1_OFFSET, 0, RCC_FDCANEN);
+            let _ = reg_read(RCC_BASE, RCC_APB1ENR1_OFFSET);
+
+            reg_modify(RCC_BASE, RCC_APB1RSTR1_OFFSET, 0, RCC_FDCANRST);
+            reg_modify(RCC_BASE, RCC_APB1RSTR1_OFFSET, RCC_FDCANRST, 0);
+
+            // PA11/PA12: alternate-function mode, push-pull, high speed,
+            // no pulls, AF9 (FDCAN1_RX/FDCAN1_TX).
+            let mode_mask = (0b11 << 22) | (0b11 << 24);
+            let mode_af = (0b10 << 22) | (0b10 << 24);
+            reg_modify(GPIOA_BASE, GPIO_MODER_OFFSET, mode_mask, mode_af);
+            reg_modify(GPIOA_BASE, GPIO_OTYPER_OFFSET, (1 << 11) | (1 << 12), 0);
+            reg_modify(
+                GPIOA_BASE,
+                GPIO_OSPEEDR_OFFSET,
+                mode_mask,
+                (0b10 << 22) | (0b10 << 24),
+            );
+            reg_modify(GPIOA_BASE, GPIO_PUPDR_OFFSET, mode_mask, 0);
+            reg_modify(
+                GPIOA_BASE,
+                GPIO_AFRH_OFFSET,
+                (0xF << 12) | (0xF << 16),
+                (9 << 12) | (9 << 16),
+            );
+        }
+    }
+
     /// Write FDCAN1 into initialisation mode and enable configuration change.
     ///
     /// Sets CCCR.INIT=1 then CCCR.CCE=1 and waits for INIT to be
     /// acknowledged.  Classic-CAN only: clears FDOE and BRSE.
-    unsafe fn enter_init() {
+    unsafe fn enter_init() -> bool {
         // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
         unsafe {
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_INIT);
-            while (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) == 0 {}
+            let mut polls = 0;
+            while (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) == 0 {
+                polls += 1;
+                if polls >= MAX_INIT_POLLS {
+                    return false;
+                }
+            }
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_CCE);
             // Classic CAN only — clear FD and bit-rate-switching bits.
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_FDOE | CCCR_BRSE, 0);
+            true
         }
     }
 
     /// Leave initialisation mode (INIT=0) to start normal operation.
     ///
     /// Waits until INIT is deasserted by the hardware.
-    unsafe fn leave_init() {
+    unsafe fn leave_init() -> bool {
         // SAFETY: FDCAN1_BASE + offset is a valid MMIO address.
         unsafe {
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_INIT | CCCR_CCE, 0);
-            while (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) != 0 {}
+            let mut polls = 0;
+            while (reg_read(FDCAN1_BASE, FDCAN_CCCR_OFFSET) & CCCR_INIT) != 0 {
+                polls += 1;
+                if polls >= MAX_INIT_POLLS {
+                    return false;
+                }
+            }
+            true
         }
     }
 
@@ -490,10 +604,8 @@ impl FdCanTransceiver {
     /// do not exist here — writing to those addresses would corrupt XIDAM,
     /// HPMS, or reserved locations.  Only two registers need to be written:
     ///
-    /// - **TXBC** (0x0C0): TX buffer start address (word offset) and count.
-    ///   Bits [31:24] = NDT (number of dedicated TX buffers).
-    ///   Bits [15:2]  = TBSA (TX buffer start address, word offset from SRAMCAN_BASE).
-    ///   We write `MRAM_TXBUF_OFFSET / 4` as the word offset and 3 dedicated buffers.
+    /// - **TXBC** (0x0C0): TX FIFO/queue mode. The G4 message-RAM layout and
+    ///   three-element FIFO size are fixed in hardware; TFQM=0 selects FIFO.
     ///
     /// - **RXGFC** (0x080): global filter config.
     ///   ANFS[5:4] = 00 → accept all non-matching std-ID frames to FIFO 0.
@@ -501,13 +613,8 @@ impl FdCanTransceiver {
     unsafe fn configure_message_ram() {
         // SAFETY: all base addresses and offsets are valid for STM32G474.
         unsafe {
-            // TX dedicated buffers: 3 elements, FIFO mode (TFQM=0).
-            // TBSA is the word offset of MRAM_TXBUF_OFFSET from SRAMCAN_BASE.
-            reg_write(
-                FDCAN1_BASE,
-                FDCAN_TXBC_OFFSET,
-                (3 << 24) | (MRAM_TXBUF_OFFSET as u32 / 4),
-            );
+            // Three-element hardware-fixed FIFO, not queue mode (TFQM=0).
+            reg_write(FDCAN1_BASE, FDCAN_TXBC_OFFSET, 0);
 
             // Global filter: accept all non-matching std/ext IDs to FIFO 0.
             // ANFS[5:4] = 00 (accept to FIFO 0), ANFE[1:0] = 00.
@@ -613,8 +720,12 @@ impl CanTransceiver for FdCanTransceiver {
         // SAFETY: single-core startup context assumed; FDCAN1 registers are
         // valid on STM32G474RE.
         unsafe {
+            Self::configure_clock_and_gpio();
+
             // Enter configuration mode.
-            Self::enter_init();
+            if !Self::enter_init() {
+                return ErrorCode::InitFailed;
+            }
 
             // Bit timing for 500 kbit/s.
             reg_write(FDCAN1_BASE, FDCAN_NBTP_OFFSET, NBTP_500KBPS);
@@ -640,7 +751,7 @@ impl CanTransceiver for FdCanTransceiver {
     fn shutdown(&mut self) {
         // SAFETY: FDCAN1_BASE + CCCR offset is valid.
         unsafe {
-            Self::enter_init();
+            let _ = Self::enter_init();
         }
         self.base.transition_to_closed();
     }
@@ -656,7 +767,9 @@ impl CanTransceiver for FdCanTransceiver {
         unsafe {
             // Clear MON to enable TX acknowledge (normal operation).
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_MON, 0);
-            Self::leave_init();
+            if !Self::leave_init() {
+                return ErrorCode::InitFailed;
+            }
         }
         self.base.transition_to_open()
     }
@@ -674,7 +787,9 @@ impl CanTransceiver for FdCanTransceiver {
     /// Close the bus (re-enter init mode, logical state → Closed).
     fn close(&mut self) -> ErrorCode {
         // SAFETY: FDCAN1 CCCR register is valid.
-        unsafe { Self::enter_init() };
+        if !unsafe { Self::enter_init() } {
+            return ErrorCode::InitFailed;
+        }
         self.base.transition_to_closed()
     }
 
@@ -686,9 +801,13 @@ impl CanTransceiver for FdCanTransceiver {
         // SAFETY: FDCAN1 registers valid.
         unsafe {
             // Re-enter init to change CCCR.MON, then leave init.
-            Self::enter_init();
+            if !Self::enter_init() {
+                return ErrorCode::InitFailed;
+            }
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, 0, CCCR_MON);
-            Self::leave_init();
+            if !Self::leave_init() {
+                return ErrorCode::InitFailed;
+            }
         }
         self.base.transition_to_muted()
     }
@@ -700,9 +819,13 @@ impl CanTransceiver for FdCanTransceiver {
         }
         // SAFETY: FDCAN1 registers valid.
         unsafe {
-            Self::enter_init();
+            if !Self::enter_init() {
+                return ErrorCode::InitFailed;
+            }
             reg_modify(FDCAN1_BASE, FDCAN_CCCR_OFFSET, CCCR_MON, 0);
-            Self::leave_init();
+            if !Self::leave_init() {
+                return ErrorCode::InitFailed;
+            }
         }
         self.base.transition_to_open()
     }

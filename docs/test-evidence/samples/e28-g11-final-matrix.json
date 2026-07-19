@@ -60,9 +60,9 @@
     "errors": 0
   },
   "artifacts": [
-    {"name": "nvm_test_g474", "sha256": "00ccf5b228a57dc6e66ebee777ee5f7214ab98e151ae5cdad104e727ed76558a"},
-    {"name": "app_g474", "sha256": "a774adf6fcd259411fd64b15852ae6b8ce06a68f5d9815c0f9129fcf9ba9765f"},
-    {"name": "app_f413", "sha256": "6f60dbe277d05080713a018eea4540f870dca9b912727793997b08eea01bd418"}
+    {"name": "nvm_test_g474", "identity_ref": "private-ci-artifact:e28-g11-nvm-test-g474"},
+    {"name": "app_g474", "identity_ref": "private-ci-artifact:e28-g11-app-g474"},
+    {"name": "app_f413", "identity_ref": "private-ci-artifact:e28-g11-app-f413"}
   ],
   "hil": {
     "boards": ["nucleo-g474re", "nucleo-f413zh"],

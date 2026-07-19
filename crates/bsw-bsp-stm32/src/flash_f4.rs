@@ -42,6 +42,7 @@ const SR_BSY: u32 = 1 << 16;
 /// OPERR | WRPERR | PGAERR | PGPERR | PGSERR | RDERR
 const SR_ERROR_MASK: u32 = (1 << 1) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8);
 const SR_EOP: u32 = 1 << 0;
+const MAX_READY_POLLS: u32 = 20_000_000;
 
 // ---------------------------------------------------------------------------
 // Storage region geometry
@@ -123,8 +124,13 @@ impl FlashF4 {
     pub unsafe fn wait_ready() -> bool {
         // SAFETY: polling the status register is side-effect free.
         unsafe {
-            while Self::is_busy() {
+            let mut polls = MAX_READY_POLLS;
+            while Self::is_busy() && polls != 0 {
                 core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+                polls -= 1;
+            }
+            if polls == 0 {
+                return false;
             }
             read_reg(FLASH_SR.cast_const()) & SR_ERROR_MASK == 0
         }
@@ -209,6 +215,9 @@ impl FlashF4 {
         }
         for (index, chunk) in data.chunks_exact(4).enumerate() {
             let value = u32::from_le_bytes(chunk.try_into().expect("4-byte chunk"));
+            if value == u32::MAX {
+                continue;
+            }
             #[allow(clippy::cast_possible_truncation)]
             let target = addr + (index as u32) * 4;
             // SAFETY: forwarded caller contract.
@@ -237,6 +246,17 @@ impl FlashF4 {
 /// `program_unit = 4` (word programming).
 pub struct F4StorageBackend {
     _not_send: core::marker::PhantomData<*mut ()>,
+}
+
+fn flash_critical<R>(operation: impl FnOnce() -> R) -> R {
+    #[cfg(target_arch = "arm")]
+    {
+        cortex_m::interrupt::free(|_| operation())
+    }
+    #[cfg(not(target_arch = "arm"))]
+    {
+        operation()
+    }
 }
 
 impl F4StorageBackend {
@@ -291,12 +311,16 @@ impl StorageBackend for F4StorageBackend {
         let sector = STORAGE_FIRST_SECTOR + unit_index as u32;
         // SAFETY: `new()` establishes exclusive flash ownership; the sector
         // is inside the reserved storage region.
-        let ok = unsafe {
-            FlashF4::unlock();
-            let ok = FlashF4::erase_sector(sector);
-            FlashF4::lock();
-            ok
-        };
+        let ok = flash_critical(|| {
+            // SAFETY: backend ownership, checked sector, and interrupt mask
+            // make this flash-controller sequence exclusive.
+            unsafe {
+                FlashF4::unlock();
+                let ok = FlashF4::erase_sector(sector);
+                FlashF4::lock();
+                ok
+            }
+        });
         if ok {
             Ok(())
         } else {
@@ -309,16 +333,33 @@ impl StorageBackend for F4StorageBackend {
             return Err(StorageError::Unaligned);
         }
         Self::check_range(offset, data.len())?;
+        let mut old = [0u8; 4];
+        for (chunk_index, chunk) in data.chunks_exact(4).enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let address = STORAGE_BASE_ADDR + (offset + chunk_index * 4) as u32;
+            FlashF4::read(address, &mut old);
+            if old
+                .iter()
+                .zip(chunk)
+                .any(|(&before, &after)| before & after != after)
+            {
+                return Err(StorageError::NotErased);
+            }
+        }
         #[allow(clippy::cast_possible_truncation)]
         let address = STORAGE_BASE_ADDR + offset as u32;
         // SAFETY: `new()` establishes exclusive flash ownership; the range
         // is inside the reserved storage region and word-aligned.
-        let ok = unsafe {
-            FlashF4::unlock();
-            let ok = FlashF4::program(address, data);
-            FlashF4::lock();
-            ok
-        };
+        let ok = flash_critical(|| {
+            // SAFETY: backend ownership, checked range, and interrupt mask
+            // make this flash-controller sequence exclusive.
+            unsafe {
+                FlashF4::unlock();
+                let ok = FlashF4::program(address, data);
+                FlashF4::lock();
+                ok
+            }
+        });
         if ok {
             Ok(())
         } else {

@@ -14,9 +14,9 @@ use bsw_logger::LevelFilter;
 use bsw_time::Instant;
 use std::fmt::Write as _;
 
+use bsw_reference_core::ProductionComposition;
 pub use config::{AppConfig, ConfigError};
 use diagnostics::{DiagnosticCore, DiagnosticTransport};
-use io::SimulatedIo;
 use lifecycle::LifecycleSystem;
 use storage::PersistentServices;
 
@@ -25,8 +25,7 @@ use storage::PersistentServices;
 pub struct ReferenceApp {
     config: AppConfig,
     lifecycle: LifecycleSystem,
-    diagnostics: DiagnosticCore,
-    io: SimulatedIo,
+    core: ProductionComposition,
     storage: PersistentServices,
     command_count: u64,
 }
@@ -37,8 +36,7 @@ impl ReferenceApp {
         Ok(Self {
             config,
             lifecycle: LifecycleSystem::new(),
-            diagnostics: DiagnosticCore::new(),
-            io: SimulatedIo::default(),
+            core: ProductionComposition::new(),
             storage: PersistentServices::new().expect("static storage geometry is valid"),
             command_count: 0,
         })
@@ -49,8 +47,9 @@ impl ReferenceApp {
             .storage
             .read_counter(self.config.storage.diagnostic_block)
         {
-            self.diagnostics.restore_counter(counter);
+            self.core.diagnostics_mut().restore_counter(counter);
         }
+        self.core.start(now);
         self.lifecycle.start(now)
     }
 
@@ -58,9 +57,10 @@ impl ReferenceApp {
         self.storage
             .write_counter(
                 self.config.storage.diagnostic_block,
-                self.diagnostics.persistent_counter(),
+                self.core.diagnostics().persistent_counter(),
             )
             .map_err(|_| "storage write failed")?;
+        self.core.shutdown(now);
         self.lifecycle.shutdown(now)
     }
 
@@ -73,7 +73,7 @@ impl ReferenceApp {
     }
 
     pub fn diagnostics_mut(&mut self) -> &mut DiagnosticCore {
-        &mut self.diagnostics
+        self.core.diagnostics_mut()
     }
 
     #[allow(clippy::too_many_lines)] // command tree is intentionally visible in one dispatch table
@@ -125,11 +125,12 @@ impl ReferenceApp {
             ["stats", "all"] => format!(
                 "commands={} diagnostics={}",
                 self.command_count,
-                self.diagnostics.dispatch_count()
+                self.core.diagnostics().dispatch_count()
             ),
             ["diag", request] => match decode_hex(request) {
                 Ok(bytes) => encode_hex(
-                    self.diagnostics
+                    self.core
+                        .diagnostics_mut()
                         .dispatch_at(DiagnosticTransport::Console, &bytes, now)
                         .bytes(),
                 ),
@@ -138,7 +139,7 @@ impl ReferenceApp {
             ["io", "adc", value] => match value
                 .parse::<u16>()
                 .ok()
-                .and_then(|value| self.io.drive_adc(value).ok())
+                .and_then(|value| self.core.cycle_io(value, now).ok())
             {
                 Some(snapshot) => format!(
                     "adc={} speed={} pwm={}",
@@ -147,7 +148,7 @@ impl ReferenceApp {
                 None => "error: adc".into(),
             },
             ["io", "gpio", value] if matches!(*value, "0" | "1") => {
-                self.io.set_output(*value == "1");
+                self.core.set_output(*value == "1", now);
                 format!("gpio={}", value)
             }
             ["storage", "get"] => match self.storage.read_counter(self.config.storage.demo_block) {

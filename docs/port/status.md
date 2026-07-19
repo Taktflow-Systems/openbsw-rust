@@ -4,11 +4,11 @@
 
 Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`
 
-Mandatory rows closed: **33/37**. A row closes only as `done` or `native replacement`; `partial` never counts.
+Mandatory rows closed: **37/37**. A row closes only as `done` or `native replacement`; `partial` never counts.
 
 | Scope | Done | Native replacement | Partial | Missing | Excluded |
 |---|---:|---:|---:|---:|---:|
-| mandatory | 22 | 11 | 0 | 3 | 1 |
+| mandatory | 23 | 14 | 0 | 0 | 0 |
 | optional | 0 | 0 | 0 | 0 | 1 |
 | project extension | 3 | 0 | 0 | 0 | 0 |
 
@@ -18,7 +18,7 @@ Mandatory rows closed: **33/37**. A row closes only as `done` or `native replace
 | `bsw.asyncConsole` | native replacement | port behavior | `bsw-console` | C16-C18 |
 | `bsw.asyncFreeRtos` | native replacement | native replacement | `bsw-async` | C09-C11 |
 | `bsw.asyncImpl` | native replacement | native replacement | `bsw-async` | C09-C11 |
-| `bsw.asyncThreadX` | excluded | FreeRTOS/POSIX Rust executors replace ThreadX | — | C09-C11 |
+| `bsw.asyncThreadX` | native replacement | FreeRTOS/POSIX Rust executors replace ThreadX | `bsw-async` | C09-C11 |
 | `bsw.bsp` | done | port contracts and implement per board | `bsw-bsp-stm32` | D03, G01-G20 |
 | `bsw.common` | native replacement | native replacement | `bsw-common` | C01 |
 | `bsw.cpp2can` | done | port behavior | `bsw-can` | D12-D16 |
@@ -42,13 +42,13 @@ Mandatory rows closed: **33/37**. A row closes only as `done` or `native replace
 | `bsw.uds` | done | port behavior | `bsw-uds` | E14-E25 |
 | `bsw.util` | native replacement | native Rust utilities | `bsw-util`, `bsw-common`, `bsw-estd` | C05-C06 |
 | `bsp.bspCharInputOutput` | done | native console traits | `bsw-console`, `bsw-bsp-stm32` | C18, G06 |
-| `bsp.bspDynamicClient` | missing | port behavior | — | G01-G15 |
+| `bsp.bspDynamicClient` | native replacement | typed fixed-capacity client registry | `bsw-bsp-stm32` | G01-G15 |
 | `bsp.bspInputManager` | done | native platform traits | `bsw-bsp-stm32` | G07, G09 |
 | `bsp.bspInterrupts` | done | native Cortex-M implementation | `bsw-bsp-stm32` | G02-G04 |
 | `bsp.bspOutputManager` | done | native platform traits | `bsw-bsp-stm32` | G07 |
 | `bsp.bspOutputPwm` | done | native platform traits | `bsw-bsp-stm32` | G08 |
-| `safety.safeMonitor` | missing | port behavior | — | H01-H09 |
-| `safety.safeUtils` | missing | port behavior | — | H01-H09 |
+| `safety.safeMonitor` | done | port behavior | `bsw-safety` | H01-H09 |
+| `safety.safeUtils` | native replacement | heap-free typed safety utilities | `bsw-safety` | H01-H09 |
 | `platform.posix` | done | native POSIX adapters | `bsw-platform-posix` | F01 |
 | `app.referenceApp` | done | compose equivalent Rust application | `openbsw-reference-app` | F02-F10 |
 | `platform.s32k1xx` | excluded | optional expansion after mandatory release | — | S01-S18 |

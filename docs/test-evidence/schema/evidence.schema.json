@@ -35,13 +35,29 @@
     "artifacts": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": ["name", "sha256"],
-        "properties": {
-          "name": {"type": "string"},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-        },
-        "additionalProperties": false
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["name", "sha256"],
+            "properties": {
+              "name": {"type": "string"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["name", "identity_ref"],
+            "properties": {
+              "name": {"type": "string"},
+              "identity_ref": {
+                "type": "string",
+                "pattern": "^private-ci-artifact:[a-z0-9._-]+$"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       }
     },
     "hil": {"type": "object"}

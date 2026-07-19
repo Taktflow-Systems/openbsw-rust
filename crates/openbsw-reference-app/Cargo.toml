@@ -21,6 +21,7 @@ bsw-lifecycle = { path = "../bsw-lifecycle" }
 bsw-logger = { path = "../bsw-logger" }
 bsw-middleware = { path = "../bsw-middleware" }
 bsw-platform-posix = { path = "../bsw-platform-posix" }
+bsw-reference-core = { path = "../bsw-reference-core" }
 bsw-storage = { path = "../bsw-storage" }
 bsw-time = { path = "../bsw-time" }
 bsw-uds = { path = "../bsw-uds" }

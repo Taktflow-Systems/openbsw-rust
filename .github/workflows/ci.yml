@@ -92,9 +92,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.94.0
+      - run: cargo install cargo-deny --version 0.20.2 --locked
+      - run: cargo deny check licenses advisories bans sources
       - run: pwsh ./tools/port/check_generated.ps1
       - run: python tools/port/generate_status.py --check docs/port/status.md
+      - run: python tools/port/generate_sbom.py --output docs/port/sbom.cdx.json --check
       - run: python tools/port/validate_evidence.py
+      - run: python tools/port/check_privacy.py
       - run: python tools/port/inventory_unsafe.py --check
       - run: python tools/port/check_dependencies.py
       - run: python tools/port/check_stm32_examples.py

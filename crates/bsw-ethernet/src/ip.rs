@@ -31,7 +31,7 @@ impl IpAddress {
         Self::V4([a, b, c, d])
     }
 
-    /// Create from a big-endian `u32` (e.g. `0xC0A80001` = 192.168.0.1).
+    /// Create from a big-endian `u32` (e.g. `0xC6336401` = 198.51.100.1).
     #[inline]
     pub const fn ipv4_from_u32(addr: u32) -> Self {
         Self::V4(addr.to_be_bytes())

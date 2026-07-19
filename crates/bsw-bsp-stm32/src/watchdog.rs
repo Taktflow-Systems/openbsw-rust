@@ -24,6 +24,7 @@ const PRESCALER_DIV32: u32 = 0b011;
 
 /// Reload value for ~1 second timeout: 999 → 1000 ticks at 1 kHz = 1.0s.
 const RELOAD_1S: u32 = 999;
+const MAX_UPDATE_POLLS: u32 = 1_000_000;
 
 #[inline(always)]
 unsafe fn reg_write(offset: usize, val: u32) {
@@ -43,6 +44,42 @@ pub struct Iwdg {
     started: bool,
 }
 
+/// Reset-safe adapter for the startup fast-test state machine. The caller
+/// supplies the previously latched reset cause before RCC flags are cleared.
+pub struct IwdgFastTestBackend<'a> {
+    watchdog: &'a mut Iwdg,
+    watchdog_reset_observed: bool,
+}
+
+impl<'a> IwdgFastTestBackend<'a> {
+    pub fn new(watchdog: &'a mut Iwdg, watchdog_reset_observed: bool) -> Self {
+        Self {
+            watchdog,
+            watchdog_reset_observed,
+        }
+    }
+}
+
+impl bsw_safety::mechanisms::WatchdogFastTestBackend for IwdgFastTestBackend<'_> {
+    fn arm_shortest_timeout(&mut self) -> bool {
+        #[allow(clippy::cast_possible_truncation)]
+        self.watchdog
+            .start_with_timeout(crate::resource_contract::WATCHDOG_FAST_TEST_RESET_MS as u32)
+    }
+    fn reset_marker_observed(&self) -> bool {
+        self.watchdog_reset_observed
+    }
+    fn request_controlled_reset(&mut self) {
+        cortex_m::peripheral::SCB::sys_reset()
+    }
+    fn retained_state(&self) -> Option<bsw_safety::RetainedWatchdogFastTest> {
+        crate::fault::retained_watchdog_test()
+    }
+    fn store_retained_state(&mut self, state: bsw_safety::RetainedWatchdogFastTest) {
+        crate::fault::write_retained_watchdog_test(state);
+    }
+}
+
 impl Iwdg {
     pub const fn from_token(_token: crate::board::Watchdog) -> Self {
         Self::new()
@@ -58,7 +95,7 @@ impl Iwdg {
     ///
     /// **WARNING**: Once started, the IWDG cannot be stopped.
     /// The only way to disable it is a system reset.
-    pub fn start(&mut self) {
+    pub fn start(&mut self) -> bool {
         unsafe {
             // Start the watchdog first — this auto-enables LSI oscillator
             // which is needed for PR/RLR register updates to propagate.
@@ -75,19 +112,26 @@ impl Iwdg {
 
             // Wait for PVU and RVU flags to clear (registers updated).
             // LSI is now running (started by KEY_ENABLE above).
-            while (reg_read(SR_OFFSET) & 0x03) != 0 {}
+            let mut polls = 0;
+            while (reg_read(SR_OFFSET) & 0x03) != 0 {
+                polls += 1;
+                if polls >= MAX_UPDATE_POLLS {
+                    return false;
+                }
+            }
 
             // Initial kick.
             reg_write(KR_OFFSET, KEY_RELOAD);
         }
 
         self.started = true;
+        true
     }
 
     /// Start the IWDG with a custom timeout in milliseconds.
     ///
     /// Actual timeout = `timeout_ms` (clamped to 1..=4096 ms at /32 prescaler).
-    pub fn start_with_timeout(&mut self, timeout_ms: u32) {
+    pub fn start_with_timeout(&mut self, timeout_ms: u32) -> bool {
         let reload = timeout_ms.clamp(1, 4096).saturating_sub(1);
 
         unsafe {
@@ -95,11 +139,18 @@ impl Iwdg {
             reg_write(KR_OFFSET, KEY_UNLOCK);
             reg_write(PR_OFFSET, PRESCALER_DIV32);
             reg_write(RLR_OFFSET, reload);
-            while (reg_read(SR_OFFSET) & 0x03) != 0 {}
+            let mut polls = 0;
+            while (reg_read(SR_OFFSET) & 0x03) != 0 {
+                polls += 1;
+                if polls >= MAX_UPDATE_POLLS {
+                    return false;
+                }
+            }
             reg_write(KR_OFFSET, KEY_RELOAD);
         }
 
         self.started = true;
+        true
     }
 
     /// Kick (reload) the watchdog to prevent reset.
@@ -138,8 +189,11 @@ impl bsw_platform::Watchdog for Iwdg {
             return Err(bsw_platform::WatchdogError::UnsupportedTimeout);
         }
         #[allow(clippy::cast_possible_truncation)]
-        self.start_with_timeout(millis as u32);
-        Ok(())
+        if self.start_with_timeout(millis as u32) {
+            Ok(())
+        } else {
+            Err(bsw_platform::WatchdogError::HardwareFault)
+        }
     }
 
     fn service(&mut self) {

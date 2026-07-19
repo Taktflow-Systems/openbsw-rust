@@ -1,17 +1,17 @@
 # Master Plan: Complete the Eclipse OpenBSW Rust Port
 
-- Status: execution in progress; packages A01-A10, B01-B12, C01-C18, D01-D21, E01-E34, F01-F10, and G01-G11 completed
+- Status: mandatory execution complete; packages A01-I09 completed
 - Plan date: 2026-07-17
-- Execution checkpoint: 882/1,092 mandatory package-hours (80.77%) completed on 2026-07-18
-- Next package: G12 (STM32F4 storage integration and conformance)
+- Execution checkpoint: 1,092/1,092 mandatory package-hours (100%) completed on 2026-07-19
+- Next package: none in mandatory scope; S01-S18 remain optional and require separate authorization
 - Workspace: `openbsw-rust`
 - Upstream parity baseline: Eclipse OpenBSW commit [`ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`](https://github.com/eclipse-openbsw/openbsw/commit/ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77), observed as the tip of `main` when this plan was written.
 
-The E28-G11 checkpoint is backed by DoIP/COM/E2E gates, the composed POSIX
-reference application, target-cross checks for both STM32 families, physical
-PWM/ADC/watchdog/reset/UART/GPIO smoke on F413 and G474, and the destructive
-G474 storage conformance runner. Generated parity, resource, unsafe, and test
-evidence policies are part of the checkpoint.
+The completed mandatory checkpoint is backed by the versioned G12-I09 matrix,
+two independent cache-free source roots, byte-identical pinned POSIX and MCU
+release artifacts, full host/Linux/target/fuzz/Miri/policy gates, and the
+exact-artifact two-board storage, safety, recovery, reset, and soak campaign.
+Exact build identities remain in ignored private evidence.
 
 ## 1. Outcome
 
@@ -449,3 +449,21 @@ The mandatory port is complete only when all items below are true:
 ## 12. First Executable Sequence
 
 Start with A01 and proceed through A10. Do not begin by adding another protocol service or board example. The first concrete milestone is a controlled baseline and parity ledger; it is what turns all later work into measurable port completion rather than feature accumulation.
+
+## 13. Mandatory completion record
+
+The mandatory A01-I09 sequence closed on 2026-07-19 at 1,092/1,092 package
+hours and 37/37 mandatory parity rows. Gate G is supported by enforced total
+RAM/stack/queue/timing budgets, shared production composition, deterministic
+fixture isolation, two-board smoke, seven journal reboot cuts, overflow,
+error-passive/bus-off recovery, ten resets, actual resource exhaustion, and a
+ten-minute soak per board. Gate H is supported by the non-certification H01-H09
+report and exact-artifact fault matrix. Gate I is supported by clean-root
+regression, privacy/unsafe/dependency policies, independent reproducibility,
+current-upstream drift, and final acceptance.
+
+The canonical publishable index is
+`docs/test-evidence/samples/g12-i09-final-matrix.json`. Exact source/artifact
+digests, maps, binaries, bench selectors, and raw logs remain only in ignored
+private CI evidence. Optional S32K148 packages S01-S18 are not part of this
+mandatory completion claim.

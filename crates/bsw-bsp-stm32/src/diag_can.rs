@@ -90,6 +90,7 @@ use bsw_docan::constants::FlowStatus;
 use bsw_docan::rx_handler::RxProtocolHandler;
 use bsw_docan::tx_handler::{TxProtocolHandler, TxState};
 use bsw_lifecycle::TransitionResult;
+use bsw_time::{Duration, Instant};
 use bsw_uds::diag_job::DiagRouter;
 use bsw_uds::session::DiagSession;
 
@@ -101,7 +102,11 @@ use bsw_uds::session::DiagSession;
 /// Maximum message length for ISO-TP reassembly/TX.
 /// Kept at 256 to avoid stack overflow on Cortex-M4 (8 KB stack).
 /// For messages >256 bytes, increase this and ensure sufficient stack.
-const MAX_MSG_LEN: usize = 256;
+pub const MAX_MSG_LEN: usize = 256;
+
+/// Bytes reserved by the transport's fixed RX/TX message buffers.
+pub const STATIC_PROTOCOL_BUFFER_BYTES: usize = MAX_MSG_LEN * 2;
+const RX_TIMEOUT: Duration = Duration::from_nanos(1_000_000_000);
 
 /// CAN frame data length for classic CAN (8 bytes).
 const CAN_DLC: usize = 8;
@@ -222,11 +227,10 @@ pub struct DiagCanTransport<'a, T: CanTransceiver + FrameSource> {
     /// UDS job router.
     router: DiagRouter<'a>,
 
-    // -- Timing (placeholder for future timeout enforcement) ---------------
-    /// Timestamp (microseconds) of the last received frame.
-    /// Reserved for N_Cr timeout enforcement in a future iteration.
-    #[allow(dead_code)]
-    last_rx_time_us: u32,
+    // -- Timing and bounded admission --------------------------------------
+    last_rx_time: Instant,
+    rx_timeouts: u32,
+    rx_rejected_while_busy: u32,
 }
 
 impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
@@ -263,7 +267,9 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
             tx_seq: 1,
             session: DiagSession::Default,
             router,
-            last_rx_time_us: 0,
+            last_rx_time: Instant::from_nanos(0),
+            rx_timeouts: 0,
+            rx_rejected_while_busy: 0,
         }
     }
 
@@ -286,6 +292,16 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
         &mut self.transceiver
     }
 
+    #[must_use]
+    pub const fn rx_timeouts(&self) -> u32 {
+        self.rx_timeouts
+    }
+
+    #[must_use]
+    pub const fn rx_rejected_while_busy(&self) -> u32 {
+        self.rx_rejected_while_busy
+    }
+
     // -----------------------------------------------------------------------
     // Main poll loop
     // -----------------------------------------------------------------------
@@ -305,6 +321,17 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
     /// This design avoids blocking and allows the caller to interleave
     /// other work between polls.
     pub fn poll(&mut self) {
+        self.poll_at(self.last_rx_time);
+    }
+
+    /// Perform one unit of work using the caller's monotonic time.
+    pub fn poll_at(&mut self, now: Instant) {
+        if self.rx_phase == RxPhase::ReceivingMultiFrame
+            && now.is_at_or_after(self.last_rx_time.wrapping_add(RX_TIMEOUT))
+        {
+            self.abort_rx();
+            self.rx_timeouts = self.rx_timeouts.saturating_add(1);
+        }
         // ── Step 0: Bus-off recovery ────────────────────────────────────
         // If the FDCAN went bus-off (TEC >= 256), it enters INIT mode
         // automatically on STM32G4. The driver owns restart timing.
@@ -323,7 +350,7 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
             let frame_id = frame.id().raw_id();
 
             if frame_id == self.request_id {
-                self.handle_rx_frame(&frame);
+                self.handle_rx_frame(&frame, now);
             } else if frame_id == self.response_id {
                 // Flow control from tester arrives on the response ID in
                 // some addressing schemes. Handle it for the TX path.
@@ -342,20 +369,32 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
     // -----------------------------------------------------------------------
 
     /// Processes a single received CAN frame on the request ID.
-    fn handle_rx_frame(&mut self, frame: &CanFrame) {
+    fn handle_rx_frame(&mut self, frame: &CanFrame, now: Instant) {
         let data = frame.payload();
         let Ok(decoded) = codec::decode_frame(data, &self.codec_config) else {
             return;
         };
 
         match decoded {
-            DecodedFrame::Single(sf) => self.handle_single_frame(&sf),
-            DecodedFrame::First(ff) => self.handle_first_frame(&ff),
-            DecodedFrame::Consecutive(cf) => self.handle_consecutive_frame(&cf),
-            DecodedFrame::FlowControl(_) => {
-                // FC on request ID is unexpected in normal server mode.
-                // Silently ignore.
+            DecodedFrame::Single(sf) => {
+                if self.rx_phase == RxPhase::ReceivingMultiFrame {
+                    self.rx_rejected_while_busy = self.rx_rejected_while_busy.saturating_add(1);
+                } else {
+                    self.handle_single_frame(&sf);
+                }
             }
+            DecodedFrame::First(ff) => {
+                if self.rx_phase == RxPhase::ReceivingMultiFrame {
+                    self.rx_rejected_while_busy = self.rx_rejected_while_busy.saturating_add(1);
+                } else {
+                    self.handle_first_frame(&ff, now);
+                }
+            }
+            DecodedFrame::Consecutive(cf) => self.handle_consecutive_frame(&cf, now),
+            // In normal physical addressing the tester sends request data and
+            // flow control to the same ECU receive ID. Route FC into the
+            // response TX state machine instead of discarding it.
+            DecodedFrame::FlowControl(_) => self.handle_tx_flow_control(frame),
         }
     }
 
@@ -376,7 +415,7 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
 
     /// Handles the first frame of a multi-frame request: store initial
     /// payload, set up RX handler, and send FC(CTS) to the tester.
-    fn handle_first_frame(&mut self, ff: &FirstFrame<'_>) {
+    fn handle_first_frame(&mut self, ff: &FirstFrame<'_>, now: Instant) {
         let msg_len = ff.message_length as usize;
         if !(8..=MAX_MSG_LEN).contains(&msg_len) {
             return; // invalid or too large for our buffer
@@ -388,6 +427,7 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
         self.rx_len = first_data_len;
         self.rx_expected_len = msg_len;
         self.rx_seq = 1; // next expected SN
+        self.last_rx_time = now;
 
         // Calculate number of CFs expected.
         let remaining = msg_len - first_data_len;
@@ -412,7 +452,7 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
     }
 
     /// Handles a consecutive frame during multi-frame reception.
-    fn handle_consecutive_frame(&mut self, cf: &ConsecutiveFrame<'_>) {
+    fn handle_consecutive_frame(&mut self, cf: &ConsecutiveFrame<'_>, now: Instant) {
         if self.rx_phase != RxPhase::ReceivingMultiFrame {
             return; // unexpected CF — ignore
         }
@@ -424,6 +464,7 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
             return;
         }
         self.rx_seq = self.rx_seq.wrapping_add(1);
+        self.last_rx_time = now;
 
         // Append payload bytes, clamping to the expected message length.
         let remaining = self.rx_expected_len.saturating_sub(self.rx_len);
@@ -556,7 +597,13 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
             .is_ok()
             {
                 let frame = CanFrame::with_data(CanId::base(self.response_id as u16), &buf);
-                let _ = self.transceiver.write(&frame);
+                if self.transceiver.write(&frame) != bsw_can::transceiver::ErrorCode::Ok {
+                    self.finish_tx();
+                    return;
+                }
+            } else {
+                self.finish_tx();
+                return;
             }
             self.tx_offset = ff_data_len;
             self.tx_seq = 1;
@@ -572,8 +619,9 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
         }
     }
 
-    /// Handles a Flow Control frame received from the tester on the
-    /// response CAN ID (during multi-frame TX).
+    /// Handles a Flow Control frame received from the tester during
+    /// multi-frame TX. Standard physical addressing carries this on the ECU
+    /// request ID; the response-ID path is retained for legacy fixtures.
     fn handle_tx_flow_control(&mut self, frame: &CanFrame) {
         if self.tx_phase != TxPhase::Sending {
             return;
@@ -624,7 +672,17 @@ impl<'a, T: CanTransceiver + FrameSource> DiagCanTransport<'a, T> {
                 .is_ok()
                 {
                     let frame = CanFrame::with_data(CanId::base(self.response_id as u16), &buf);
-                    let _ = self.transceiver.write(&frame);
+                    match self.transceiver.write(&frame) {
+                        bsw_can::transceiver::ErrorCode::Ok => {}
+                        bsw_can::transceiver::ErrorCode::TxHwQueueFull => return,
+                        _ => {
+                            self.finish_tx();
+                            return;
+                        }
+                    }
+                } else {
+                    self.finish_tx();
+                    return;
                 }
 
                 self.tx_offset += cf_data_len;
@@ -870,6 +928,25 @@ mod tests {
         }
     }
 
+    struct LongResponseJob;
+
+    impl DiagJob for LongResponseJob {
+        fn implemented_request(&self) -> &[u8] {
+            &[0x22]
+        }
+        fn session_mask(&self) -> SessionMask {
+            SessionMask::ALL
+        }
+        fn process(&self, _request: &[u8], response: &mut [u8]) -> Result<usize, Nrc> {
+            let payload = [
+                0x62, 0xcf, 0x01, b'O', b'p', b'e', b'n', b'B', b'S', b'W', b'-', b'I', b'S', b'O',
+                b'T', b'P',
+            ];
+            response[..payload.len()].copy_from_slice(&payload);
+            Ok(payload.len())
+        }
+    }
+
     // -- Helper: build transport with mock -----------------------------------
 
     fn make_transport<'a>(
@@ -908,6 +985,70 @@ mod tests {
         assert_eq!(resp.payload()[0], 0x02); // SF PCI: length=2
         assert_eq!(resp.payload()[1], 0x7E); // positive response SID
         assert_eq!(resp.payload()[2], 0x00); // sub-function echo
+    }
+
+    #[test]
+    fn occupied_static_session_rejects_then_recovers_at_timeout() {
+        let echo = EchoJob;
+        let jobs: &[&dyn DiagJob] = &[&echo];
+        let router = DiagRouter::new(jobs);
+        let mut trx = MockTransceiver::new();
+        let first = [0x10, 0x20, 0x3e, 0x00, 1, 2, 3, 4];
+        let competing_first = [0x10, 0x20, 0x3e, 0x00, 5, 6, 7, 8];
+        let tester_present = [0x02, 0x3e, 0x00, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc];
+        trx.enqueue_rx(rx_frame(0x600, &first));
+        trx.enqueue_rx(rx_frame(0x600, &competing_first));
+        trx.enqueue_rx(rx_frame(0x600, &tester_present));
+        trx.enqueue_rx(rx_frame(0x600, &tester_present));
+
+        let mut transport = make_transport(trx, router);
+        transport.poll_at(Instant::from_nanos(10));
+        assert_eq!(transport.transceiver().tx_count(), 1);
+        transport.poll_at(Instant::from_nanos(20));
+        transport.poll_at(Instant::from_nanos(30));
+        assert_eq!(transport.rx_rejected_while_busy(), 2);
+        assert_eq!(transport.transceiver().tx_count(), 1);
+        transport.poll_at(Instant::from_nanos(1_000_000_010));
+        assert_eq!(transport.rx_timeouts(), 1);
+        assert_eq!(transport.transceiver().tx_count(), 2);
+        assert_eq!(
+            transport.transceiver().tx_frame(1).unwrap().payload()[1],
+            0x7e
+        );
+    }
+
+    #[test]
+    fn flow_control_on_request_id_releases_multiframe_response() {
+        let job = LongResponseJob;
+        let jobs: &[&dyn DiagJob] = &[&job];
+        let router = DiagRouter::new(jobs);
+        let mut trx = MockTransceiver::new();
+
+        trx.enqueue_rx(rx_frame(
+            0x600,
+            &[0x03, 0x22, 0xcf, 0x01, 0xcc, 0xcc, 0xcc, 0xcc],
+        ));
+        trx.enqueue_rx(rx_frame(
+            0x600,
+            &[0x30, 0x00, 0x00, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc],
+        ));
+
+        let mut transport = make_transport(trx, router);
+        transport.poll();
+        assert_eq!(transport.transceiver().tx_count(), 1);
+        assert_eq!(
+            transport.transceiver().tx_frame(0).unwrap().payload()[0] >> 4,
+            1
+        );
+
+        transport.poll();
+        transport.poll();
+        transport.poll();
+        assert_eq!(transport.transceiver().tx_count(), 3);
+        assert_eq!(
+            transport.transceiver().tx_frame(1).unwrap().payload()[0] >> 4,
+            2
+        );
     }
 
     #[test]

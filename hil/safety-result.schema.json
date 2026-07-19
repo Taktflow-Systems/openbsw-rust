@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "fixture_id", "fixture_revision", "board", "probe_class", "reset_method", "artifact", "destructive_scope", "isolation", "cases", "outcome"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "fixture_id": {"type": "string", "pattern": "^fixture-[a-z0-9]{1,16}$"},
+    "fixture_revision": {"type": "string", "minLength": 1},
+    "board": {"enum": ["stm32f413", "stm32g474"]},
+    "probe_class": {"const": "st-link"},
+    "reset_method": {"const": "watchdog-controlled-hardfault"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^safety_fault_(f413|g474)$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "destructive_scope": {"const": "linker-reserved-storage-only"},
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_lock", "peer_isolated", "serial_flushed", "noinit_cleared"],
+      "properties": {
+        "fixture_lock": {"const": true},
+        "peer_isolated": {"const": true},
+        "serial_flushed": {"const": true},
+        "noinit_cleared": {"const": true}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "passed", "detail"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^H0[1-8]-"},
+          "passed": {"type": "boolean"},
+          "detail": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "outcome": {"enum": ["passed", "failed"]}
+  }
+}

@@ -43,7 +43,9 @@ const FLAG_TOMBSTONE: u16 = 0x0001;
 const COMMIT_BYTE: u8 = 0x33;
 /// Chunk size for streaming payload verification and relocation; a
 /// multiple of every supported program unit.
-const COPY_CHUNK: usize = 32;
+// Large enough to keep physical flash relocation bounded without allocating,
+// while remaining comfortably below the production task stack budgets.
+const COPY_CHUNK: usize = 256;
 
 /// Wear bookkeeping tracked by the store since [`JournalStore::mount`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

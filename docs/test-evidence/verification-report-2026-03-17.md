@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-17
 **Target**: NUCLEO-G474RE (STM32G474RET6, 170 MHz, FDCAN)
-**Tester**: Raspberry Pi (192.168.0.195, candleLight USB-CAN, 500 kbps)
+**Tester**: generic Linux SocketCAN fixture (500 kbps)
 **Firmware**: `bsw_stack_g474` (crate-level BSW stack, 12 KB)
 
 ## Test Summary

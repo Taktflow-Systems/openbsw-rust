@@ -20,6 +20,8 @@ bsw-uds = { path = "../bsw-uds", default-features = false }
 bsw-lifecycle = { path = "../bsw-lifecycle", default-features = false }
 bsw-console = { path = "../bsw-console", default-features = false }
 bsw-platform = { path = "../bsw-platform", default-features = false }
+bsw-reference-core = { path = "../bsw-reference-core", default-features = false }
+bsw-safety = { path = "../bsw-safety", default-features = false }
 bsw-storage = { path = "../bsw-storage", default-features = false }
 bsw-time = { path = "../bsw-time", default-features = false }
 bsw-transport = { path = "../bsw-transport", default-features = false }
@@ -82,7 +84,43 @@ name = "can_tester_g474"
 required-features = ["stm32g474"]
 
 [[example]]
+name = "can_stress_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "can_stress_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "can_busoff_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "can_busoff_g474"
+required-features = ["stm32g474"]
+
+[[example]]
 name = "nvm_test_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "nvm_test_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "mpu_negative_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "mpu_negative_g474"
+required-features = ["stm32g474"]
+
+[[example]]
+name = "safety_fault_f413"
+required-features = ["stm32f413"]
+
+[[example]]
+name = "safety_fault_g474"
 required-features = ["stm32g474"]
 
 [[example]]

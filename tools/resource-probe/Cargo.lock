@@ -33,6 +33,8 @@ dependencies = [
  "bsw-docan",
  "bsw-lifecycle",
  "bsw-platform",
+ "bsw-reference-core",
+ "bsw-safety",
  "bsw-storage",
  "bsw-time",
  "bsw-transport",
@@ -118,6 +120,23 @@ name = "bsw-platform"
 version = "0.1.0"
 dependencies = [
  "bsw-time",
+]
+
+[[package]]
+name = "bsw-reference-core"
+version = "0.1.0"
+dependencies = [
+ "bsw-time",
+ "bsw-uds",
+]
+
+[[package]]
+name = "bsw-safety"
+version = "0.1.0"
+dependencies = [
+ "bsw-lifecycle",
+ "bsw-time",
+ "bsw-util",
 ]
 
 [[package]]
@@ -217,6 +236,7 @@ dependencies = [
  "bsw-io",
  "bsw-logger",
  "bsw-middleware",
+ "bsw-reference-core",
  "bsw-time",
  "bsw-transport",
  "bsw-uds",

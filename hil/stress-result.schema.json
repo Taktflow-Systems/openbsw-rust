@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/openbsw-rust/hil-stress-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture_id",
+    "fixture_revision",
+    "board",
+    "probe_class",
+    "can",
+    "reset_method",
+    "artifact",
+    "soak_seconds",
+    "reset_count",
+    "isolation",
+    "cases",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "fixture_id": {"type": "string", "pattern": "^fixture-[a-z0-9]{1,16}$"},
+    "fixture_revision": {"const": "hil-fixture-v2"},
+    "board": {"enum": ["stm32f413", "stm32g474"]},
+    "probe_class": {"const": "st-link"},
+    "can": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_class", "bitrate", "mode"],
+      "properties": {
+        "interface_class": {"const": "socketcan"},
+        "bitrate": {"const": 500000},
+        "mode": {"const": "classic"}
+      }
+    },
+    "reset_method": {"const": "debug-port-system-reset"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "soak_seconds": {"type": "integer", "minimum": 600},
+    "reset_count": {"type": "integer", "minimum": 10},
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_lock", "peer_isolated", "can_reset", "noinit_cleared"],
+      "properties": {
+        "fixture_lock": {"const": true},
+        "peer_isolated": {"const": true},
+        "can_reset": {"const": true},
+        "noinit_cleared": {"const": true}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "passed", "duration_us", "detail", "threshold"],
+        "properties": {
+          "name": {"type": "string"},
+          "passed": {"type": "boolean"},
+          "duration_us": {"type": "integer", "minimum": 0},
+          "detail": {"type": "string"},
+          "threshold": {"type": "string"}
+        }
+      }
+    },
+    "outcome": {"enum": ["passed", "failed"]}
+  }
+}

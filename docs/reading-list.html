@@ -366,7 +366,7 @@ DTCs: 0xC07300 (bus-off), 0xD00100 (watchdog), 0xD10000 (flash fail)
 
 Categories: basic UDS (5), security (3), multi-frame (2), persistence (2), DTC lifecycle (3), E2E (3), negative paths (4), ECUReset (1)
 
-**Run**: \`ssh pi@192.168.0.195 "cd openbsw-rust/hil && python3 hil_runner.py"\` → all green
+            **Run**: `ssh <fixture-user>@<fixture-host> "cd openbsw-rust/hil && python3 hil_runner.py"` → all green
 
 ---
 
@@ -386,7 +386,7 @@ Each phase: implement → \`cargo test\` → cross-compile → flash → HW veri
 
 **Date**: 2026-03-17
 **Target**: NUCLEO-G474RE (STM32G474RET6, 170 MHz, FDCAN)
-**Tester**: Raspberry Pi (192.168.0.195, candleLight USB-CAN, 500 kbps)
+            **Tester**: generic Linux SocketCAN fixture (500 kbps)
 **Firmware**: \`bsw_stack_g474\` (crate-level BSW stack, 12 KB)
 
 ## Test Summary

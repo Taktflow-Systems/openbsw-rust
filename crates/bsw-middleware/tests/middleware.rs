@@ -10,8 +10,9 @@ const GOLDEN: &str = include_str!("../src/generated/vehicle_control.rs");
 #[test]
 fn representative_model_generation_is_deterministic_and_golden() {
     let model = parse_model(MODEL).unwrap();
-    assert_eq!(generate(&model), generate(&model));
-    assert_eq!(generate(&model), GOLDEN);
+    let generated = generate(&model);
+    assert_eq!(generated, generate(&model));
+    assert_eq!(generated, GOLDEN.replace("\r\n", "\n"));
     assert_eq!(vehicle_control::VEHICLE_CONTROL.id, 0x1200);
     assert_eq!(vehicle_control::VEHICLE_CONTROL.members.len(), 2);
     assert_eq!(vehicle_control::ROUTES[0].target_cluster, 2);

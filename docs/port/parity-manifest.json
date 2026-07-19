@@ -105,13 +105,16 @@
       "id": "bsw.asyncThreadX",
       "upstream_path": "libs/bsw/asyncThreadX",
       "scope": "mandatory",
-      "status": "excluded",
+      "status": "native replacement",
       "strategy": "FreeRTOS/POSIX Rust executors replace ThreadX",
-      "rust_crates": [],
+      "rust_crates": [
+        "bsw-async"
+      ],
       "owner_packages": [
         "C09-C11"
       ],
       "evidence": [
+        "crates/bsw-async",
         "docs/architecture/adr-0001-port-boundaries.md"
       ],
       "candidate_test_roots": []
@@ -132,7 +135,8 @@
       "evidence": [
         "crates/bsw-bsp-stm32",
         "docs/port/upstream-test-inventory.md",
-        "docs/test-evidence/samples/e28-g11-final-matrix.json"
+        "docs/test-evidence/samples/e28-g11-final-matrix.json",
+        "docs/test-evidence/samples/g12-i09-final-matrix.json"
       ],
       "candidate_test_roots": [
         "libs/bsw/bsp/test"
@@ -601,14 +605,18 @@
       "id": "bsp.bspDynamicClient",
       "upstream_path": "libs/bsp/bspDynamicClient",
       "scope": "mandatory",
-      "status": "missing",
-      "strategy": "port behavior",
-      "rust_crates": [],
+      "status": "native replacement",
+      "strategy": "typed fixed-capacity client registry",
+      "rust_crates": [
+        "bsw-bsp-stm32"
+      ],
       "owner_packages": [
         "G01-G15"
       ],
       "evidence": [
-        "docs/port/upstream-baseline.md"
+        "crates/bsw-bsp-stm32/src/dynamic_client.rs",
+        "crates/bsw-bsp-stm32/src/board_apps.rs",
+        "docs/port/reference-app-parity.md"
       ],
       "candidate_test_roots": []
     },
@@ -693,14 +701,19 @@
       "id": "safety.safeMonitor",
       "upstream_path": "libs/safety/safeMonitor",
       "scope": "mandatory",
-      "status": "missing",
+      "status": "done",
       "strategy": "port behavior",
-      "rust_crates": [],
+      "rust_crates": [
+        "bsw-safety"
+      ],
       "owner_packages": [
         "H01-H09"
       ],
       "evidence": [
-        "docs/port/upstream-baseline.md"
+        "crates/bsw-safety/src/monitor.rs",
+        "crates/bsw-safety/src/supervisor.rs",
+        "docs/port/safety-mechanisms-2026-07-18.md",
+        "docs/test-evidence/samples/g12-i09-final-matrix.json"
       ],
       "candidate_test_roots": []
     },
@@ -708,14 +721,19 @@
       "id": "safety.safeUtils",
       "upstream_path": "libs/safety/safeUtils",
       "scope": "mandatory",
-      "status": "missing",
-      "strategy": "port behavior",
-      "rust_crates": [],
+      "status": "native replacement",
+      "strategy": "heap-free typed safety utilities",
+      "rust_crates": [
+        "bsw-safety"
+      ],
       "owner_packages": [
         "H01-H09"
       ],
       "evidence": [
-        "docs/port/upstream-baseline.md"
+        "crates/bsw-safety/src/mechanisms.rs",
+        "crates/bsw-safety/src/task.rs",
+        "docs/port/safety-mechanisms-2026-07-18.md",
+        "docs/test-evidence/samples/g12-i09-final-matrix.json"
       ],
       "candidate_test_roots": []
     },

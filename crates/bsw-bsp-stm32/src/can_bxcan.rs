@@ -43,8 +43,9 @@ use crate::can_isr::InterruptQueue;
 use bsw_can::{
     AbstractTransceiver, CanFrame, CanId, CanTransceiver, ErrorCode, State, TransceiverState,
 };
+use bsw_time::{Duration, Instant};
 
-const RX_QUEUE_SIZE: usize = 32;
+pub const RX_QUEUE_SIZE: usize = crate::resource_contract::F413_CAN_RX_FRAMES;
 use stm32f4xx_hal::pac;
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,9 @@ pub struct BxCanTransceiver {
     base: AbstractTransceiver<8>,
     /// Software receive queue (circular buffer, interrupt-filled).
     rx_queue: InterruptQueue<RX_QUEUE_SIZE>,
+    hardware_dropped: u32,
     health: CanHealth,
+    bus_off_since: Option<Instant>,
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +107,9 @@ impl BxCanTransceiver {
         Self {
             base: AbstractTransceiver::new(bus_id),
             rx_queue: InterruptQueue::new(),
-            health: CanHealth::new(bsw_time::Duration::from_nanos(1_000_000_000)),
+            hardware_dropped: 0,
+            health: CanHealth::new(Duration::from_nanos(1_000_000_000)),
+            bus_off_since: None,
         }
     }
 
@@ -113,15 +118,52 @@ impl BxCanTransceiver {
         // SAFETY: CAN1 is uniquely owned by this driver.
         let can = unsafe { &*pac::CAN1::ptr() };
         let flags = CanInterruptFlags::from_bxcan(can.msr().read().bits(), can.esr().read().bits());
+        if flags.bus_off && self.bus_off_since.is_none() {
+            self.bus_off_since = Some(now);
+        }
         let state = self.health.handle(flags, now);
         self.health.observe_queue_drops(self.rx_queue.dropped());
         self.base.set_transceiver_state(state);
-        if self.health.poll_recovery(now) == Some(TransceiverState::Active) {
-            let _ = self.close();
+        let recovery_due = self.bus_off_since.is_some_and(|started| {
+            now.is_at_or_after(started.wrapping_add(Duration::from_nanos(1_000_000_000)))
+        });
+        if recovery_due {
+            // A bus-off bxCAN instance can refuse INAK while a failed mailbox
+            // remains latched. Reset the peripheral at the RCC boundary before
+            // applying the normal typed initialization sequence.
+            // SAFETY: this driver uniquely owns CAN1 and its RCC reset action.
+            let rcc = unsafe { &*pac::RCC::ptr() };
+            rcc.apb1rstr().modify(|_, w| w.can1rst().set_bit());
+            let _ = rcc.apb1rstr().read();
+            rcc.apb1rstr().modify(|_, w| w.can1rst().clear_bit());
+            self.base.transition_to_closed();
+            self.health = CanHealth::new(Duration::from_nanos(1_000_000_000));
+            self.bus_off_since = None;
             let _ = self.init();
             let _ = self.open();
             self.base.set_transceiver_state(TransceiverState::Active);
         }
+    }
+
+    /// Total frames rejected because the bounded ISR queue was full.
+    #[must_use]
+    pub fn rx_dropped(&self) -> u32 {
+        self.rx_queue
+            .dropped()
+            .saturating_add(self.hardware_dropped)
+    }
+
+    /// Connect or isolate the physical CAN TX alternate-function pin.
+    ///
+    /// This is reserved for controlled HIL bus-off injection. RX remains
+    /// connected so the controller observes the missing acknowledgement.
+    pub fn set_tx_connected_for_test(&mut self, connected: bool) {
+        // SAFETY: the typed driver uniquely owns CAN1's configured PD1 pin.
+        let gpiod = unsafe { &*pac::GPIOD::ptr() };
+        let mode = if connected { 0b10 << 2 } else { 0 };
+        gpiod
+            .moder()
+            .modify(|r, w| unsafe { w.bits((r.bits() & !(0b11 << 2)) | mode) });
     }
 
     // -----------------------------------------------------------------------
@@ -139,9 +181,16 @@ impl BxCanTransceiver {
     pub unsafe fn receive_isr(&mut self) {
         // SAFETY: single-owner PAC access from ISR context.
         let can = unsafe { &*pac::CAN1::ptr() };
+        if can.rf0r().read().fovr().bit_is_set() {
+            self.hardware_dropped = self.hardware_dropped.saturating_add(1);
+            can.rf0r().write(|w| w.fovr().clear());
+        }
 
-        // FMP0 holds the number of pending messages in FIFO0 (0–3).
-        while can.rf0r().read().fmp().bits() > 0 {
+        // Snapshot FMP0 once. RFOM propagation can lag the following APB read
+        // by a few cycles; a live `while FMP > 0` loop can therefore copy one
+        // mailbox twice. New arrivals are handled by the next poll.
+        let pending = can.rf0r().read().fmp().bits().min(3);
+        for _ in 0..pending {
             // Read the three receive registers for mailbox 0 (RDT0R, RDL0R, RDH0R).
             let rir = can.rx(0).rir().read();
             let rx_data_length = can.rx(0).rdtr().read();
@@ -175,6 +224,7 @@ impl BxCanTransceiver {
             // Release the mailbox so the hardware can accept the next message.
             // SAFETY: writing RFOM0 releases the FIFO0 output mailbox.
             can.rf0r().modify(|_, w| w.rfom().release());
+            let _ = can.rf0r().read();
 
             // Store in the software circular buffer.
             let frame = CanFrame::with_data(CanId::id(raw_id, ide), &data[..dlc as usize]);
@@ -469,6 +519,10 @@ impl CanTransceiver for BxCanTransceiver {
         unsafe {
             can.ier()
                 .modify(|_, w| w.fmpie0().clear_bit().tmeie().clear_bit());
+            // Abort failed automatic retransmissions before requesting INAK;
+            // otherwise bxCAN can hold the recovery transition indefinitely.
+            can.tsr()
+                .write(|w| w.abrq0().set_bit().abrq1().set_bit().abrq2().set_bit());
             Self::enter_init_mode(can);
         }
         self.base.transition_to_closed()

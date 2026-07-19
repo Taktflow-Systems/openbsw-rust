@@ -1,14 +1,26 @@
 {
   "targets": {
     "stm32f413": {
-      "flash_bytes_max": 11000,
+      "flash_bytes_max": 30000,
       "bss_bytes_max": 128,
-      "largest_frame_bytes_max": 2560
+      "largest_frame_bytes_max": 3072,
+      "ram_static_bytes_max": 2048,
+      "noinit_reserved_bytes_max": 1024,
+      "total_ram_required_bytes_max": 8192,
+      "task_stack_bytes_max": 7168,
+      "isr_stack_increment_bytes_max": 512,
+      "combined_msp_bytes_max": 7424
     },
     "stm32g474": {
-      "flash_bytes_max": 18000,
+      "flash_bytes_max": 30000,
       "bss_bytes_max": 128,
-      "largest_frame_bytes_max": 2560
+      "largest_frame_bytes_max": 3072,
+      "ram_static_bytes_max": 2048,
+      "noinit_reserved_bytes_max": 1024,
+      "total_ram_required_bytes_max": 8192,
+      "task_stack_bytes_max": 7168,
+      "isr_stack_increment_bytes_max": 512,
+      "combined_msp_bytes_max": 7424
     }
   },
   "buffers": {
@@ -28,7 +40,26 @@
     "doip_discovery_entity_max": 96,
     "stm32_can_interrupt_queue_32_max": 800,
     "stm32_cycle_accumulator_max": 64,
-    "stm32_can_health_max": 64
+    "stm32_can_health_max": 64,
+    "reference_core_max": 256,
+    "stm32_diag_static_buffers_max": 768,
+    "dynamic_client_8x4_max": 320
+  },
+  "queues": {
+    "f413_can_rx_frames": 32,
+    "g474_can_rx_frames": 16,
+    "console_tx_bytes": 512,
+    "diagnostic_payload_bytes": 256,
+    "diagnostic_response_bytes": 128
+  },
+  "timing": {
+    "reference_cycle_us_max": 1000,
+    "heartbeat_period_us_max": 1000000,
+    "can_bus_off_recovery_ms_max": 1100,
+    "uds_response_ms_max": 100,
+    "watchdog_fast_test_reset_ms_max": 1000,
+    "watchdog_fast_test_deadline_ms_max": 1500,
+    "bounded_soak_minutes": 10
   },
   "benchmarks": {
     "crc32_bytes_per_second_min": 10000000,

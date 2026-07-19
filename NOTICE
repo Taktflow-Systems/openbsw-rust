@@ -1,0 +1,11 @@
+Eclipse OpenBSW Rust Port
+Copyright 2024-2026 the project contributors
+
+This product is licensed under Apache-2.0 as declared by the workspace and
+all production crates. It is a behavior-compatible Rust port grounded in the
+Eclipse openBSW baseline identified in docs/port/upstream-baseline.md; it does
+not include an Eclipse openBSW C++ implementation in the production graph.
+
+Third-party Rust dependencies and their license expressions are enumerated in
+docs/port/sbom.cdx.json. No probe identifiers, credentials, personal paths, or
+bench hostnames are release metadata.

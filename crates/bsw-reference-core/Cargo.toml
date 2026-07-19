@@ -1,0 +1,15 @@
+[package]
+name = "bsw-reference-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared no_std application core for POSIX and STM32 reference applications"
+
+[dependencies]
+bsw-time = { path = "../bsw-time", default-features = false }
+bsw-uds = { path = "../bsw-uds", default-features = false }
+
+[lints]
+workspace = true

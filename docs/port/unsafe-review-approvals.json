@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "review_set": "g12-i09-final-review-v1",
+  "reviews": {
+    "allocator": {
+      "decision": "approved",
+      "rationale": "Tree indices, orders, alignment, and caller-owned backing storage are bounded before pointer derivation.",
+      "verification": ["bsw-util unit tests", "full bsw-util Miri"]
+    },
+    "bsp-concurrency": {
+      "decision": "approved",
+      "rationale": "The interrupt queue has one producer, one consumer, release/acquire publication, and bounded overflow accounting.",
+      "verification": ["can_isr unit tests", "can_isr Miri", "controlled wraparound concurrency test"]
+    },
+    "bsp-hardware": {
+      "decision": "approved",
+      "rationale": "Unsafe operations are confined to feature-selected MCU MMIO, typed peripheral ownership, linker-owned memory, exception capture, or explicitly bounded destructive storage roles.",
+      "verification": ["both MCU target clippy gates", "linker assertions", "linker-bound storage checks", "per-MCU HIL and MPU negative access"]
+    },
+    "can-posix-ffi": {
+      "decision": "approved",
+      "rationale": "Socket descriptors, sockaddr layouts, frame buffers, lengths, and return codes are validated at the libc boundary.",
+      "verification": ["Linux SocketCAN vcan tests", "host unit tests"]
+    },
+    "concurrency": {
+      "decision": "approved",
+      "rationale": "SPSC handles are uniquely split and release/acquire cursors publish disjoint initialized slots.",
+      "verification": ["full bsw-util Miri", "20,000-value controlled concurrency test"]
+    },
+    "container": {
+      "decision": "approved",
+      "rationale": "Raw storage initialization, movement, destruction, pinning, and intrusive-link ownership follow the live-length and capacity invariants.",
+      "verification": ["full bsw-estd Miri", "container unit and property tests"]
+    },
+    "io-concurrency": {
+      "decision": "approved",
+      "rationale": "Published cursors separate writer-owned and reader-owned initialized byte regions with bounded wraparound.",
+      "verification": ["memory_queue Miri", "I/O conformance tests"]
+    }
+  }
+}
