@@ -30,6 +30,8 @@ def approvals() -> tuple[str, dict[str, dict]]:
 
 
 def classification(path: str) -> tuple[str, str, str, str]:
+    if "bsw-bsp-tms570" in path:
+        return ("bsp-tms570-hardware", "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage", "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract", "tms570lc4357-revb")
     if "bsw-bsp-stm32" in path:
         if path.endswith("can_isr.rs"):
             return ("bsp-concurrency", "SPSC slots are exclusively owned by the published atomic cursors", "preserve the sole-producer/sole-consumer contract", "stm32-and-host-test")

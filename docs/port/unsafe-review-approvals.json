@@ -17,6 +17,11 @@
       "rationale": "Unsafe operations are confined to feature-selected MCU MMIO, typed peripheral ownership, linker-owned memory, exception capture, or explicitly bounded destructive storage roles.",
       "verification": ["both MCU target clippy gates", "linker assertions", "linker-bound storage checks", "per-MCU HIL and MPU negative access"]
     },
+    "bsp-tms570-hardware": {
+      "decision": "approved",
+      "rationale": "Unsafe operations are confined to revision-B TMS570LC4357 descriptor storage, volatile EMAC words, private retained-record publication, and target-only exception assembly with fixed layout, alignment, ownership, byte-order, banked-state, reset, and barrier contracts; raw pointers are not exposed to applications.",
+      "verification": ["TMS570 descriptor and retained-record host tests", "TMS570 target cross-build", "TMS570 startup/exception linker and disassembly assertions", "RAM-only retained exception physical matrix"]
+    },
     "can-posix-ffi": {
       "decision": "approved",
       "rationale": "Socket descriptors, sockaddr layouts, frame buffers, lengths, and return codes are validated at the libc boundary.",

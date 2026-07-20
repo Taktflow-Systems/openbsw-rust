@@ -50,6 +50,18 @@
       "version": "0.1.0"
     },
     {
+      "bom-ref": "pkg:cargo/bsw-bsp-tms570@0.1.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "name": "bsw-bsp-tms570",
+      "purl": "pkg:cargo/bsw-bsp-tms570@0.1.0",
+      "type": "library",
+      "version": "0.1.0"
+    },
+    {
       "bom-ref": "pkg:cargo/bsw-can@0.1.0",
       "licenses": [
         {

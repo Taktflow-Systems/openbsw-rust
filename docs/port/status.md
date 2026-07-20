@@ -9,7 +9,7 @@ Mandatory rows closed: **38/38**. A row closes only as `done` or `native replace
 | Scope | Done | Native replacement | Partial | Missing | Excluded |
 |---|---:|---:|---:|---:|---:|
 | mandatory | 24 | 14 | 0 | 0 | 0 |
-| optional | 0 | 0 | 0 | 0 | 3 |
+| optional | 0 | 0 | 1 | 0 | 3 |
 | project extension | 3 | 0 | 0 | 0 | 0 |
 
 | Row | Status | Strategy | Rust crates | Owner packages |
@@ -52,6 +52,7 @@ Mandatory rows closed: **38/38**. A row closes only as `done` or `native replace
 | `platform.posix` | done | native POSIX adapters | `bsw-platform-posix` | F01 |
 | `app.referenceApp` | done | compose equivalent Rust application | `openbsw-reference-app` | F02-F10 |
 | `platform.s32k1xx` | excluded | optional expansion after mandatory release | — | S01-S18 |
+| `platform.tms570lc4357` | partial | new optional physical platform expansion; T01-T13 complete | `bsw-bsp-tms570` | T01-T35 |
 | `extension.com` | done | retain and harden | `bsw-com` | E32-E33 |
 | `extension.e2e` | done | label and harden | `bsw-util`, `bsw-com` | E34 |
 | `extension.can-fd` | done | retain and harden | `bsw-can` | D14 |

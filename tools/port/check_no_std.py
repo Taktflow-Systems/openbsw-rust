@@ -12,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 HOST_ONLY_CRATES = {
     "bsw-bsp-stm32",  # checked per MCU feature/target by check_features.py
+    "bsw-bsp-tms570",  # checked on the tier-3 BE32 target by check_features.py
     "bsw-platform-posix",
     "openbsw-reference-app",
 }
@@ -78,6 +79,7 @@ def main() -> int:
     command = [
         "cargo", "check", "--workspace",
         "--exclude", "bsw-bsp-stm32",
+        "--exclude", "bsw-bsp-tms570",
         "--exclude", "bsw-platform-posix",
         "--exclude", "openbsw-reference-app",
         "--no-default-features", "--target", "thumbv7em-none-eabihf",

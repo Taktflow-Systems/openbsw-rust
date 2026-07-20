@@ -58,6 +58,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsw-bsp-tms570"
+version = "0.1.0"
+dependencies = [
+ "bsw-can",
+ "bsw-platform",
+ "bsw-time",
+]
+
+[[package]]
 name = "bsw-can"
 version = "0.1.0"
 dependencies = [

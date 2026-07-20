@@ -57,3 +57,61 @@ Residual production work is product-specific: safety goals, timing/FMEA
 analysis, independent review, proof-test intervals, production watchdog window,
 fault-injection authority, linker-map qualification, and certification evidence.
 Unsupported ECC diagnostics remain explicit and must not be inferred.
+
+## Optional LAUNCHXL2-570LC43 capability status
+
+No production TMS570 safety-mechanism coverage is claimed yet. The operator-confirmed
+carrier is LAUNCHXL2-570LC43; only the public board model is retained. The
+operator also confirmed a bare board, permitting one controlled reset and two
+RAM-only executions of a 12-byte register marker. Both clean-start runs reached
+the expected marker and self-loop, but this is debugger/execution evidence, not
+a safety-mechanism verification.
+The subsequent RAM-only clock role also passed twice: all three required PLL
+observations agreed, DCC accepted 300 MHz, and the 300/150/75-MHz clock plan was
+read back. Its five-attempt fail-closed policy is host-tested, but two normal
+runs do not establish diagnostic coverage or prove the rare advisory failure
+path on silicon.
+The subsequent 224-byte SRAM role passed twice after the clock role: it
+verified privileged IRQ/FIQ mask and exact entry-mask restoration, configured
+only RTI counter 0 for one-microsecond ticks, and crossed a bounded 100-ms
+firmware threshold. This establishes basic critical-section and monotonic-timer
+operation, not interrupt latency, safety diagnostic coverage, or watchdog
+behavior.
+The subsequent 1,152-byte SRAM VIM role passed twice. It physically proves
+one RTI channel-2 IRQ and one FIQ, separate banked stacks, hardware index 3,
+reviewed context save/restore, barriers, and architectural exception returns.
+Its DEVICE#56 path acknowledges only Group-2 channel 2 in live and shadow ESM
+status and verifies unrelated status words are unchanged. This is interrupt
+dispatch evidence, not a production ESM handler, diagnostic-coverage claim,
+fault-injection result, latency bound, or proof of every VIM channel.
+The subsequent 1,836-byte retained-exception role passed eight controlled
+reset runs: two each for undefined, SVC, prefetch abort, and data abort. It
+physically proves banked entry/context capture, A32 LR correction, applicable
+fault address, integrity-protected commit, and debugger classification of the
+byte-identical record at reset vector zero. The fixed-vector PC redirection is
+explicitly flagged in the record. This is bounded diagnostic-support evidence,
+not a diagnostic-coverage metric, imprecise-abort recovery claim, ECC fault
+injection, production vector/startup execution, or application recovery proof.
+Compile-time and host-tested models cover its exact 16 MHz oscillator,
+MII/DP83630 wiring,
+PHY address and quiescent power-down state plus the exact main/data-flash
+geometry, implemented SRAM/ECC aliases, mandatory SRAM-before-stack startup
+order, all required banked-mode
+stack reservations, bounded MDIO selection, and CPPI descriptor ownership.
+An A32 inspection ELF additionally proves the compile/link ordering of reset,
+bounded SRAM/VIM ECC auto-initialization, warm-reset record preservation plus
+bank-7 ECC regeneration, all banked SP values, hard-float
+enable, `.data`/`.bss`, VBAR, VIM fallback, and 128 default vectors. That
+flash-mapped inspection ELF has not run on the connected hardware and does not
+prove full ESM handling, MPU/cache, watchdog, direct production-vector/startup
+fault handling, flash programming, DCAN, EMAC, PHY, or physical recovery. RTI
+counter 0 and VIM channel 2 are now
+proven only to the limited extents described above.
+
+The revision-B safety baseline must incorporate SPNZ232B CORTEX-R5#7,
+DEVICE#40, DEVICE#54, DEVICE#56, DEVICE#60, GCM#58-60, L2FMC#5 and
+SSWF021#45. In particular, CPPI access is byte-swapped in software and PLL
+selection must be preceded by bounded slip checks and DCC frequency
+measurement. The final report remains a non-certification diagnostic-support
+record and cannot make ASIL, diagnostic-coverage, or freedom-from-interference
+claims.

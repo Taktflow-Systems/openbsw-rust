@@ -1,0 +1,63 @@
+[package]
+name = "bsw-bsp-tms570"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "LAUNCHXL2-570LC43 and TMS570LC4357 revision-B support for the OpenBSW Rust port"
+
+[features]
+default = []
+tms570lc4357-revb = []
+launchxl2-570lc43 = ["tms570lc4357-revb"]
+
+[dependencies]
+bsw-can = { path = "../bsw-can", default-features = false }
+bsw-platform = { path = "../bsw-platform", default-features = false }
+bsw-time = { path = "../bsw-time", default-features = false }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "link_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "startup_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "ram_marker"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "clock_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "rti_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "vim_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false
+
+[[example]]
+name = "exception_probe"
+required-features = ["launchxl2-570lc43"]
+test = false
+bench = false

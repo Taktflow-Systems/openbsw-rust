@@ -236,6 +236,7 @@
       "evidence": [
         "crates/bsw-doip",
         "crates/bsw-doip/tests/diagnostic_transport.rs",
+        "crates/bsw-doip/tests/embedded_entity.rs",
         "crates/bsw-doip/tests/posix_entity.rs",
         "fuzz/fuzz_targets/doip_tcp.rs",
         "fuzz/fuzz_targets/doip_diagnostic.rs",
@@ -358,6 +359,8 @@
       ],
       "evidence": [
         "crates/bsw-ethernet/src/lwip.rs",
+        "crates/bsw-ethernet/src/lwip/fake.rs",
+        "crates/bsw-ethernet/tests/lwip_fake.rs",
         "docs/port/ethernet-parity.md"
       ],
       "candidate_test_roots": [
@@ -799,6 +802,28 @@
       "candidate_test_roots": [
         "platforms/s32k1xx"
       ]
+    },
+    {
+      "id": "platform.tms570lc4357",
+      "upstream_path": null,
+      "scope": "optional",
+      "status": "partial",
+      "strategy": "new optional physical platform expansion; T01-T13 complete",
+      "rust_crates": [
+        "bsw-bsp-tms570"
+      ],
+      "owner_packages": [
+        "T01-T35"
+      ],
+      "evidence": [
+        "docs/plans/plan-tms570lc4357-platform.md",
+        "crates/bsw-bsp-tms570",
+        "tools/port/check_tms570_startup.py",
+        "tools/port/check_tms570_exception_probe.py",
+        "docs/port/tms570-exception-capture.md",
+        "docs/test-evidence/samples/tms570-foundation-incomplete.json"
+      ],
+      "candidate_test_roots": []
     },
     {
       "id": "extension.com",

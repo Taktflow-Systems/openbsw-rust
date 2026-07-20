@@ -10,9 +10,15 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = "thumbv7em-none-eabihf"
+TMS570_TARGET = "armebv7r-none-eabihf"
+TMS570_TOOLCHAIN = "+nightly-2026-03-14"
 
 
-def cargo(arguments: list[str], should_pass: bool = True) -> bool:
+def cargo(
+    arguments: list[str],
+    should_pass: bool = True,
+    expected_error: str = "exactly one MCU feature",
+) -> bool:
     env = os.environ.copy()
     env["RUSTFLAGS"] = "-D warnings"
     command = ["cargo", *arguments]
@@ -25,7 +31,7 @@ def cargo(arguments: list[str], should_pass: bool = True) -> bool:
         if result.returncode == 0:
             print(f"unexpected success: {display}", file=sys.stderr)
             return False
-        if "exactly one MCU feature" not in result.stderr:
+        if expected_error not in result.stderr:
             print(f"wrong failure for: {display}\n{result.stderr}", file=sys.stderr)
             return False
     print(f"feature check passed: {display}")
@@ -53,6 +59,106 @@ def main() -> int:
         cargo(["check", "-p", "bsw-bsp-stm32", "--no-default-features", "--features", "stm32g474", "--target", TARGET]),
         cargo(["check", "-p", "bsw-bsp-stm32", "--no-default-features", "--features", "stm32f413,stm32g474", "--target", TARGET], should_pass=False),
         cargo(["check", "-p", "bsw-bsp-stm32", "--no-default-features", "--target", TARGET], should_pass=False),
+        cargo([
+            TMS570_TOOLCHAIN,
+            "build",
+            "-Z",
+            "build-std=core",
+            "--target",
+            TMS570_TARGET,
+            "-p",
+            "bsw-bsp-tms570",
+            "--features",
+            "tms570lc4357-revb",
+            "--lib",
+            "--locked",
+        ], should_pass=False, expected_error="requires board feature launchxl2-570lc43"),
+        cargo([
+            TMS570_TOOLCHAIN,
+            "build",
+            "-Z",
+            "build-std=core",
+            "--target",
+            TMS570_TARGET,
+            "-p",
+            "bsw-bsp-tms570",
+            "--features",
+            "launchxl2-570lc43",
+            "--lib",
+            "--locked",
+        ]),
+        cargo([
+            TMS570_TOOLCHAIN,
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "--target",
+            TMS570_TARGET,
+            "-p",
+            "bsw-bsp-tms570",
+            "--features",
+            "launchxl2-570lc43",
+            "--example",
+            "startup_probe",
+            "--locked",
+            "--",
+            "-C",
+            "linker=arm-none-eabi-gcc",
+            "-C",
+            "link-arg=-mcpu=cortex-r5",
+            "-C",
+            "link-arg=-marm",
+            "-C",
+            "link-arg=-mfloat-abi=hard",
+            "-C",
+            "link-arg=-mfpu=vfpv3-d16",
+            "-C",
+            "link-arg=-mbig-endian",
+            "-C",
+            "link-arg=-mbe32",
+            "-C",
+            "link-arg=-nostartfiles",
+            "-C",
+            "link-arg=-nostdlib",
+            "-C",
+            "link-arg=-Tcrates/bsw-bsp-tms570/linker/tms570lc4357-startup-probe.ld",
+        ]),
+        cargo([
+            TMS570_TOOLCHAIN,
+            "rustc",
+            "-Z",
+            "build-std=core",
+            "--target",
+            TMS570_TARGET,
+            "-p",
+            "bsw-bsp-tms570",
+            "--features",
+            "launchxl2-570lc43",
+            "--example",
+            "exception_probe",
+            "--locked",
+            "--",
+            "-C",
+            "linker=arm-none-eabi-gcc",
+            "-C",
+            "link-arg=-mcpu=cortex-r5",
+            "-C",
+            "link-arg=-marm",
+            "-C",
+            "link-arg=-mfloat-abi=hard",
+            "-C",
+            "link-arg=-mfpu=vfpv3-d16",
+            "-C",
+            "link-arg=-mbig-endian",
+            "-C",
+            "link-arg=-mbe32",
+            "-C",
+            "link-arg=-nostartfiles",
+            "-C",
+            "link-arg=-nostdlib",
+            "-C",
+            "link-arg=-Tcrates/bsw-bsp-tms570/linker/tms570lc4357-exception-probe.ld",
+        ]),
     ]
     return 0 if all(checks) else 1
 

@@ -3,7 +3,7 @@
 - Status: mandatory execution complete; packages A01-I09 completed
 - Plan date: 2026-07-17
 - Execution checkpoint: 1,092/1,092 mandatory package-hours (100%) completed on 2026-07-19
-- Next package: none in mandatory scope; S01-S18 remain optional and require separate authorization
+- Next package: none in mandatory scope; S01-S18 and T14-T35 remain optional and require separate authorization
 - Workspace: `openbsw-rust`
 - Upstream parity baseline: Eclipse OpenBSW commit [`be0029bbb79fe901048a24c2665f2ba854328734`](https://github.com/eclipse-openbsw/openbsw/commit/be0029bbb79fe901048a24c2665f2ba854328734), re-pinned 2026-07-20 by the governed re-pin tranche (`docs/port/repin-2026-07-20.md`, scope per `docs/port/upstream-repin-decision-2026-07-19.md`). The plan was written against, and the completed mandatory release was evidenced at, the previous baseline `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`; that release evidence is unchanged.
 
@@ -511,3 +511,22 @@ the open steps are:
   - **Gate / review reference**: same HIL gate as RP-HIL-01.
   - **Definition of done**: no gap remains in "deferred" state in
     `docs/port/can-parity.md`.
+
+## 15. Optional TMS570LC4357 physical-DoIP expansion
+
+The TMS570LC4357 revision-B port is tracked separately in
+`docs/plans/plan-tms570lc4357-platform.md`. It is an optional platform
+expansion and does not change the completed 1,092/1,092 mandatory package
+record. The TMS tranche preserved the 37/37 release parity checkpoint; the
+independent governed oracle re-pin described above subsequently added the
+current 38th mandatory row. The connected carrier is identified as
+LAUNCHXL2-570LC43, selected by its one exact board feature. Its package IDs are
+T01-T35.
+
+T01-T13 are complete, including two physical clean-start runs each of a bounded
+12-byte SRAM marker, a RAM-only 300/150/75-MHz PLL/DCC role, and a staged
+RAM-only RTI/critical-section role. Two controlled-reset runs also prove the
+SRAM-only VIM channel-2 IRQ/FIQ role. A RAM-only retained-capture role passed
+two controlled-reset classifications for each of undefined, SVC, prefetch
+abort, and data abort. T14-T35 remain optional pending work; these results do
+not alter either mandatory total.

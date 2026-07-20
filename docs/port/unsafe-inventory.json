@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "generated_from": "crates/**/*.rs",
-  "production_site_count": 392,
-  "approved_site_count": 392,
+  "production_site_count": 406,
+  "approved_site_count": 406,
   "review_set": "g12-i09-final-review-v1",
   "sites": [
     {
@@ -6024,6 +6024,286 @@
     },
     {
       "id": "U0302",
+      "path": "crates/bsw-bsp-tms570/src/emac.rs",
+      "line": 71,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "3b336f279307e36c39d93b6add483794f78df054d0362bb534357d0e6ad97716",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0303",
+      "path": "crates/bsw-bsp-tms570/src/emac.rs",
+      "line": 79,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "b7ebfc0b695480a9792f9907a57c998e752559c1cb24a30d08e2de6eab443fac",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0304",
+      "path": "crates/bsw-bsp-tms570/src/emac.rs",
+      "line": 206,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "c3b9877a6e7943952315e19e59843648c5d5d146cddef7d150037fba4026e41c",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0305",
+      "path": "crates/bsw-bsp-tms570/src/exception.rs",
+      "line": 548,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "fe93284a4a37edcfa601b239ff135c364010046b617a84ebf9437249f7315b4c",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0306",
+      "path": "crates/bsw-bsp-tms570/src/exception.rs",
+      "line": 552,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "4872c02150e1107d2d83d9998fb4979c4a56d8e540a3686cb75610f777bbde35",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0307",
+      "path": "crates/bsw-bsp-tms570/src/exception.rs",
+      "line": 564,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "dd9a2a1dbec1ce09cf56bb4b74f08e9f87f378e381a58d8561c88374cbbdc2c9",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0308",
+      "path": "crates/bsw-bsp-tms570/src/interrupt.rs",
+      "line": 95,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "0734225c35217f85542c19958342f76e8a9f382f8cae781c0a3fc79ef2a0b352",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0309",
+      "path": "crates/bsw-bsp-tms570/src/interrupt.rs",
+      "line": 118,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "0734225c35217f85542c19958342f76e8a9f382f8cae781c0a3fc79ef2a0b352",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0310",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 179,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "2c9a2029105e644a2a12dc7890fc4c696dee078562f6af93fa64c7fb907058a2",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0311",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 196,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "2c9a2029105e644a2a12dc7890fc4c696dee078562f6af93fa64c7fb907058a2",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0312",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 223,
+      "kind": "unsafe-fn",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "c6d538156a293343f75f6fe6f8eabe5e2219fa4342f10418683d7097ff1e3449",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0313",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 227,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "8714f72edeeca583eee0c1cd5ee6924f9b22cd7021b1df37c0c3608c534e422e",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0314",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 231,
+      "kind": "unsafe-fn",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "1850006ba3ce9c4dc4306f0ef1263b4258c296df363e0ffb556beaafbeb8bac8",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0315",
+      "path": "crates/bsw-bsp-tms570/src/rti.rs",
+      "line": 235,
+      "kind": "unsafe-block",
+      "scope": "library",
+      "owner": "bsp-tms570-hardware",
+      "invariant": "raw addresses refer to the feature-selected TMS570LC4357 revision-B MMIO map or statically owned descriptor storage",
+      "caller_obligations": "select the exact device feature and uphold each function's register, alignment, ownership, and memory-barrier contract",
+      "target": "tms570lc4357-revb",
+      "review_status": "approved",
+      "review_set": "g12-i09-final-review-v1",
+      "review_fingerprint": "1514ffc53ecc201234b039e602e801e1008974811f57ac3fb49d4db06effc307",
+      "review_verification": [
+        "TMS570 descriptor and retained-record host tests",
+        "TMS570 target cross-build",
+        "TMS570 startup/exception linker and disassembly assertions",
+        "RAM-only retained exception physical matrix"
+      ]
+    },
+    {
+      "id": "U0316",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 132,
       "kind": "unsafe-block",
@@ -6041,7 +6321,7 @@
       ]
     },
     {
-      "id": "U0303",
+      "id": "U0317",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 143,
       "kind": "unsafe-block",
@@ -6059,7 +6339,7 @@
       ]
     },
     {
-      "id": "U0304",
+      "id": "U0318",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 155,
       "kind": "unsafe-block",
@@ -6077,7 +6357,7 @@
       ]
     },
     {
-      "id": "U0305",
+      "id": "U0319",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 161,
       "kind": "unsafe-block",
@@ -6095,7 +6375,7 @@
       ]
     },
     {
-      "id": "U0306",
+      "id": "U0320",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 168,
       "kind": "unsafe-block",
@@ -6113,7 +6393,7 @@
       ]
     },
     {
-      "id": "U0307",
+      "id": "U0321",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 200,
       "kind": "unsafe-block",
@@ -6131,7 +6411,7 @@
       ]
     },
     {
-      "id": "U0308",
+      "id": "U0322",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 235,
       "kind": "unsafe-block",
@@ -6149,7 +6429,7 @@
       ]
     },
     {
-      "id": "U0309",
+      "id": "U0323",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 242,
       "kind": "unsafe-block",
@@ -6167,7 +6447,7 @@
       ]
     },
     {
-      "id": "U0310",
+      "id": "U0324",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 301,
       "kind": "unsafe-block",
@@ -6185,7 +6465,7 @@
       ]
     },
     {
-      "id": "U0311",
+      "id": "U0325",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 312,
       "kind": "unsafe-block",
@@ -6203,7 +6483,7 @@
       ]
     },
     {
-      "id": "U0312",
+      "id": "U0326",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 327,
       "kind": "unsafe-block",
@@ -6221,7 +6501,7 @@
       ]
     },
     {
-      "id": "U0313",
+      "id": "U0327",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 335,
       "kind": "unsafe-block",
@@ -6239,7 +6519,7 @@
       ]
     },
     {
-      "id": "U0314",
+      "id": "U0328",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 361,
       "kind": "unsafe-block",
@@ -6257,7 +6537,7 @@
       ]
     },
     {
-      "id": "U0315",
+      "id": "U0329",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 368,
       "kind": "unsafe-block",
@@ -6275,7 +6555,7 @@
       ]
     },
     {
-      "id": "U0316",
+      "id": "U0330",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 416,
       "kind": "unsafe-block",
@@ -6293,7 +6573,7 @@
       ]
     },
     {
-      "id": "U0317",
+      "id": "U0331",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 420,
       "kind": "unsafe-block",
@@ -6311,7 +6591,7 @@
       ]
     },
     {
-      "id": "U0318",
+      "id": "U0332",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 424,
       "kind": "unsafe-block",
@@ -6329,7 +6609,7 @@
       ]
     },
     {
-      "id": "U0319",
+      "id": "U0333",
       "path": "crates/bsw-can/src/socketcan.rs",
       "line": 434,
       "kind": "unsafe-block",
@@ -6347,7 +6627,7 @@
       ]
     },
     {
-      "id": "U0320",
+      "id": "U0334",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 131,
       "kind": "unsafe-block",
@@ -6365,7 +6645,7 @@
       ]
     },
     {
-      "id": "U0321",
+      "id": "U0335",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 145,
       "kind": "unsafe-fn",
@@ -6383,7 +6663,7 @@
       ]
     },
     {
-      "id": "U0322",
+      "id": "U0336",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 147,
       "kind": "unsafe-block",
@@ -6401,7 +6681,7 @@
       ]
     },
     {
-      "id": "U0323",
+      "id": "U0337",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 159,
       "kind": "unsafe-fn",
@@ -6419,7 +6699,7 @@
       ]
     },
     {
-      "id": "U0324",
+      "id": "U0338",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 161,
       "kind": "unsafe-block",
@@ -6437,7 +6717,7 @@
       ]
     },
     {
-      "id": "U0325",
+      "id": "U0339",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 170,
       "kind": "unsafe-fn",
@@ -6455,7 +6735,7 @@
       ]
     },
     {
-      "id": "U0326",
+      "id": "U0340",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 172,
       "kind": "unsafe-block",
@@ -6473,7 +6753,7 @@
       ]
     },
     {
-      "id": "U0327",
+      "id": "U0341",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 179,
       "kind": "unsafe-block",
@@ -6491,7 +6771,7 @@
       ]
     },
     {
-      "id": "U0328",
+      "id": "U0342",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 306,
       "kind": "unsafe-fn",
@@ -6509,7 +6789,7 @@
       ]
     },
     {
-      "id": "U0329",
+      "id": "U0343",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 310,
       "kind": "unsafe-block",
@@ -6527,7 +6807,7 @@
       ]
     },
     {
-      "id": "U0330",
+      "id": "U0344",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 312,
       "kind": "unsafe-block",
@@ -6545,7 +6825,7 @@
       ]
     },
     {
-      "id": "U0331",
+      "id": "U0345",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 323,
       "kind": "unsafe-fn",
@@ -6563,7 +6843,7 @@
       ]
     },
     {
-      "id": "U0332",
+      "id": "U0346",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 325,
       "kind": "unsafe-block",
@@ -6581,7 +6861,7 @@
       ]
     },
     {
-      "id": "U0333",
+      "id": "U0347",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 338,
       "kind": "unsafe-fn",
@@ -6599,7 +6879,7 @@
       ]
     },
     {
-      "id": "U0334",
+      "id": "U0348",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 340,
       "kind": "unsafe-block",
@@ -6617,7 +6897,7 @@
       ]
     },
     {
-      "id": "U0335",
+      "id": "U0349",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 349,
       "kind": "unsafe-block",
@@ -6635,7 +6915,7 @@
       ]
     },
     {
-      "id": "U0336",
+      "id": "U0350",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 365,
       "kind": "unsafe-block",
@@ -6653,7 +6933,7 @@
       ]
     },
     {
-      "id": "U0337",
+      "id": "U0351",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 383,
       "kind": "unsafe-block",
@@ -6671,7 +6951,7 @@
       ]
     },
     {
-      "id": "U0338",
+      "id": "U0352",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 402,
       "kind": "unsafe-block",
@@ -6689,7 +6969,7 @@
       ]
     },
     {
-      "id": "U0339",
+      "id": "U0353",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 424,
       "kind": "unsafe-block",
@@ -6707,7 +6987,7 @@
       ]
     },
     {
-      "id": "U0340",
+      "id": "U0354",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 465,
       "kind": "unsafe-block",
@@ -6725,7 +7005,7 @@
       ]
     },
     {
-      "id": "U0341",
+      "id": "U0355",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 485,
       "kind": "unsafe-block",
@@ -6743,7 +7023,7 @@
       ]
     },
     {
-      "id": "U0342",
+      "id": "U0356",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 509,
       "kind": "unsafe-block",
@@ -6761,7 +7041,7 @@
       ]
     },
     {
-      "id": "U0343",
+      "id": "U0357",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 531,
       "kind": "unsafe-block",
@@ -6779,7 +7059,7 @@
       ]
     },
     {
-      "id": "U0344",
+      "id": "U0358",
       "path": "crates/bsw-estd/src/forward_list.rs",
       "line": 571,
       "kind": "unsafe-block",
@@ -6797,7 +7077,7 @@
       ]
     },
     {
-      "id": "U0345",
+      "id": "U0359",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 88,
       "kind": "unsafe-impl",
@@ -6815,7 +7095,7 @@
       ]
     },
     {
-      "id": "U0346",
+      "id": "U0360",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 89,
       "kind": "unsafe-impl",
@@ -6833,7 +7113,7 @@
       ]
     },
     {
-      "id": "U0347",
+      "id": "U0361",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 122,
       "kind": "unsafe-block",
@@ -6851,7 +7131,7 @@
       ]
     },
     {
-      "id": "U0348",
+      "id": "U0362",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 197,
       "kind": "unsafe-block",
@@ -6869,7 +7149,7 @@
       ]
     },
     {
-      "id": "U0349",
+      "id": "U0363",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 231,
       "kind": "unsafe-block",
@@ -6887,7 +7167,7 @@
       ]
     },
     {
-      "id": "U0350",
+      "id": "U0364",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 269,
       "kind": "unsafe-block",
@@ -6905,7 +7185,7 @@
       ]
     },
     {
-      "id": "U0351",
+      "id": "U0365",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 409,
       "kind": "unsafe-block",
@@ -6923,7 +7203,7 @@
       ]
     },
     {
-      "id": "U0352",
+      "id": "U0366",
       "path": "crates/bsw-estd/src/object_pool.rs",
       "line": 447,
       "kind": "unsafe-block",
@@ -6941,7 +7221,7 @@
       ]
     },
     {
-      "id": "U0353",
+      "id": "U0367",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 50,
       "kind": "unsafe-block",
@@ -6959,7 +7239,7 @@
       ]
     },
     {
-      "id": "U0354",
+      "id": "U0368",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 90,
       "kind": "unsafe-fn",
@@ -6977,7 +7257,7 @@
       ]
     },
     {
-      "id": "U0355",
+      "id": "U0369",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 93,
       "kind": "unsafe-block",
@@ -6995,7 +7275,7 @@
       ]
     },
     {
-      "id": "U0356",
+      "id": "U0370",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 101,
       "kind": "unsafe-fn",
@@ -7013,7 +7293,7 @@
       ]
     },
     {
-      "id": "U0357",
+      "id": "U0371",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 103,
       "kind": "unsafe-block",
@@ -7031,7 +7311,7 @@
       ]
     },
     {
-      "id": "U0358",
+      "id": "U0372",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 113,
       "kind": "unsafe-block",
@@ -7049,7 +7329,7 @@
       ]
     },
     {
-      "id": "U0359",
+      "id": "U0373",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 122,
       "kind": "unsafe-block",
@@ -7067,7 +7347,7 @@
       ]
     },
     {
-      "id": "U0360",
+      "id": "U0374",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 137,
       "kind": "unsafe-block",
@@ -7085,7 +7365,7 @@
       ]
     },
     {
-      "id": "U0361",
+      "id": "U0375",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 154,
       "kind": "unsafe-block",
@@ -7103,7 +7383,7 @@
       ]
     },
     {
-      "id": "U0362",
+      "id": "U0376",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 175,
       "kind": "unsafe-block",
@@ -7121,7 +7401,7 @@
       ]
     },
     {
-      "id": "U0363",
+      "id": "U0377",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 202,
       "kind": "unsafe-block",
@@ -7139,7 +7419,7 @@
       ]
     },
     {
-      "id": "U0364",
+      "id": "U0378",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 229,
       "kind": "unsafe-block",
@@ -7157,7 +7437,7 @@
       ]
     },
     {
-      "id": "U0365",
+      "id": "U0379",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 250,
       "kind": "unsafe-block",
@@ -7175,7 +7455,7 @@
       ]
     },
     {
-      "id": "U0366",
+      "id": "U0380",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 269,
       "kind": "unsafe-block",
@@ -7193,7 +7473,7 @@
       ]
     },
     {
-      "id": "U0367",
+      "id": "U0381",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 295,
       "kind": "unsafe-block",
@@ -7211,7 +7491,7 @@
       ]
     },
     {
-      "id": "U0368",
+      "id": "U0382",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 313,
       "kind": "unsafe-block",
@@ -7229,7 +7509,7 @@
       ]
     },
     {
-      "id": "U0369",
+      "id": "U0383",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 319,
       "kind": "unsafe-block",
@@ -7247,7 +7527,7 @@
       ]
     },
     {
-      "id": "U0370",
+      "id": "U0384",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 327,
       "kind": "unsafe-block",
@@ -7265,7 +7545,7 @@
       ]
     },
     {
-      "id": "U0371",
+      "id": "U0385",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 347,
       "kind": "unsafe-block",
@@ -7283,7 +7563,7 @@
       ]
     },
     {
-      "id": "U0372",
+      "id": "U0386",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 524,
       "kind": "unsafe-block",
@@ -7301,7 +7581,7 @@
       ]
     },
     {
-      "id": "U0373",
+      "id": "U0387",
       "path": "crates/bsw-estd/src/vec.rs",
       "line": 564,
       "kind": "unsafe-block",
@@ -7319,7 +7599,7 @@
       ]
     },
     {
-      "id": "U0374",
+      "id": "U0388",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 92,
       "kind": "unsafe-impl",
@@ -7337,7 +7617,7 @@
       ]
     },
     {
-      "id": "U0375",
+      "id": "U0389",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 97,
       "kind": "unsafe-impl",
@@ -7355,7 +7635,7 @@
       ]
     },
     {
-      "id": "U0376",
+      "id": "U0390",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 266,
       "kind": "unsafe-block",
@@ -7373,7 +7653,7 @@
       ]
     },
     {
-      "id": "U0377",
+      "id": "U0391",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 292,
       "kind": "unsafe-block",
@@ -7391,7 +7671,7 @@
       ]
     },
     {
-      "id": "U0378",
+      "id": "U0392",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 315,
       "kind": "unsafe-block",
@@ -7409,7 +7689,7 @@
       ]
     },
     {
-      "id": "U0379",
+      "id": "U0393",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 382,
       "kind": "unsafe-block",
@@ -7427,7 +7707,7 @@
       ]
     },
     {
-      "id": "U0380",
+      "id": "U0394",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 401,
       "kind": "unsafe-block",
@@ -7445,7 +7725,7 @@
       ]
     },
     {
-      "id": "U0381",
+      "id": "U0395",
       "path": "crates/bsw-io/src/memory_queue.rs",
       "line": 426,
       "kind": "unsafe-block",
@@ -7463,7 +7743,7 @@
       ]
     },
     {
-      "id": "U0382",
+      "id": "U0396",
       "path": "crates/bsw-util/src/buddy.rs",
       "line": 111,
       "kind": "unsafe-impl",
@@ -7481,7 +7761,7 @@
       ]
     },
     {
-      "id": "U0383",
+      "id": "U0397",
       "path": "crates/bsw-util/src/buddy.rs",
       "line": 115,
       "kind": "unsafe-impl",
@@ -7499,7 +7779,7 @@
       ]
     },
     {
-      "id": "U0384",
+      "id": "U0398",
       "path": "crates/bsw-util/src/buddy.rs",
       "line": 199,
       "kind": "unsafe-block",
@@ -7517,7 +7797,7 @@
       ]
     },
     {
-      "id": "U0385",
+      "id": "U0399",
       "path": "crates/bsw-util/src/buddy.rs",
       "line": 217,
       "kind": "unsafe-fn",
@@ -7535,7 +7815,7 @@
       ]
     },
     {
-      "id": "U0386",
+      "id": "U0400",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 46,
       "kind": "unsafe-impl",
@@ -7553,7 +7833,7 @@
       ]
     },
     {
-      "id": "U0387",
+      "id": "U0401",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 51,
       "kind": "unsafe-impl",
@@ -7571,7 +7851,7 @@
       ]
     },
     {
-      "id": "U0388",
+      "id": "U0402",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 69,
       "kind": "unsafe-block",
@@ -7589,7 +7869,7 @@
       ]
     },
     {
-      "id": "U0389",
+      "id": "U0403",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 133,
       "kind": "unsafe-block",
@@ -7607,7 +7887,7 @@
       ]
     },
     {
-      "id": "U0390",
+      "id": "U0404",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 170,
       "kind": "unsafe-block",
@@ -7625,7 +7905,7 @@
       ]
     },
     {
-      "id": "U0391",
+      "id": "U0405",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 215,
       "kind": "unsafe-block",
@@ -7643,7 +7923,7 @@
       ]
     },
     {
-      "id": "U0392",
+      "id": "U0406",
       "path": "crates/bsw-util/src/spsc.rs",
       "line": 234,
       "kind": "unsafe-block",

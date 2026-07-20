@@ -47,3 +47,59 @@ exception frame, then combines the longest task path with ISR nesting. Cycles
 are rejected. This is a deterministic static budget, not a measurement of every
 possible compiler or silicon effect. Production configurations must keep pool
 counts and payload capacities within the checked limits.
+
+## Optional TMS570 foundation (not a production budget)
+
+The compile-only LC4357 BE32 hard-float link probe contains 28 bytes of text
+and no data or BSS. It exists only to prove target, linker, entry address and
+instruction endianness; its size is not a firmware estimate.
+
+Feature `launchxl2-570lc43` adds a const-only board description for the
+oscillator, MII/DP83630 path, PHY control lines, and connector. It allocates no
+runtime storage in the current inspection probes.
+
+The flash-mapped startup inspection probe contains 2,388 bytes of flash text,
+an 8-byte `.noinit` marker, a separate 160-byte aligned retained-exception
+record, and an 8,704-byte linker-enforced stack reservation. The latter
+allocates non-overlapping, eight-byte-aligned SYS,
+SVC, IRQ, FIQ, abort and undefined-mode stacks. These are inspection values,
+not an accepted production stack budget or a loadable image.
+
+The physical SRAM-marker role is exactly 12 bytes in a linker-enforced
+256-byte window at the top of implemented SRAM. It contains no data, BSS,
+stack reservation, packet storage, or MMIO access. Two agreeing clean-start
+runs proved this exact footprint on the board, but it is not a production RAM
+or stack budget.
+
+The RAM-only clock probe is 880 bytes in a linker-enforced 4-KiB SRAM window
+immediately below the marker window. It has no data, BSS, stack, heap, packet
+buffer, or nonvolatile section. Its bounded DCC and PLL polling loops passed in
+two controlled-reset runs, but this remains bring-up code rather than the
+production clock/RTI resource budget.
+
+The staged RTI/critical-section probe is 224 bytes with no data, BSS, stack,
+heap, packet buffer, or nonvolatile section. Its linker-enforced 256-byte SRAM
+window is `[0x08076000, 0x08076100)`, disjoint from the clock and marker roles.
+Two current-artifact runs passed, but this bring-up footprint is not an
+accepted production timer or interrupt-stack budget.
+
+The staged VIM role has 1,152 bytes of text and no data or BSS in a
+linker-enforced 3-KiB code window at `[0x08075000, 0x08075c00)`. It reserves 56
+bytes of private observation state plus separate 256-byte IRQ and FIQ stacks;
+all ranges are disjoint from the RTI, clock, and marker roles. Two
+controlled-reset runs passed, but these bring-up reservations are not accepted
+production ISR-stack or interrupt-latency budgets.
+
+The retained-exception role has 1,836 bytes of text and a 160-byte NOBITS
+record in linker-enforced SRAM windows. It reserves 256 bytes for Undefined,
+512 bytes for Abort, 512 bytes for Supervisor, and 512 bytes for System stack
+space. The record and stack ranges are disjoint from its code and from the VIM,
+RTI, clock, and marker roles. Eight controlled-reset classifications passed,
+but this bring-up footprint is not an accepted production reset-retention,
+stack-depth, or latency budget.
+
+The current model also enforces a 16-byte, 16-byte-aligned CPPI descriptor and
+at most 512 descriptors in the 8 KiB internal CPPI RAM. Physical high-water
+measurements, ISR nesting,
+EMAC buffers, lwIP pools, TCP/UDP sockets, DoIP messages, DoCAN queues and the
+shared application are not yet available and remain pending T28/T32.
