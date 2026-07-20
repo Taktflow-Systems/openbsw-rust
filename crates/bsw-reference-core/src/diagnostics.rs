@@ -1,9 +1,15 @@
 //! One stateful UDS implementation shared by DoCAN, DoIP, and the console.
 
 use bsw_time::Instant;
-use bsw_uds::{DiagRouter, DiagSession, EcuReset, Nrc, SessionMask, TesterPresent};
+use bsw_uds::{
+    standard_services::{clear_diagnostic_information, read_dtc_information},
+    DemManager, DiagRouter, DiagSession, EcuReset, Nrc, SessionMask, TesterPresent,
+};
 
 pub const DIAG_RESPONSE_CAPACITY: usize = 128;
+
+/// Distinct DTC codes the composition DEM can hold (fixed pool, no heap).
+pub const DEM_DTC_CAPACITY: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticTransport {
@@ -47,6 +53,7 @@ pub struct DiagnosticCore {
     dispatch_count: u64,
     last_transport: Option<DiagnosticTransport>,
     last_request_at: Instant,
+    dem: DemManager<DEM_DTC_CAPACITY>,
 }
 
 impl DiagnosticCore {
@@ -60,6 +67,7 @@ impl DiagnosticCore {
             dispatch_count: 0,
             last_transport: None,
             last_request_at: Instant::from_nanos(0),
+            dem: DemManager::new(),
         }
     }
 
@@ -81,6 +89,10 @@ impl DiagnosticCore {
         };
         match sid {
             0x10 => self.session_control(request),
+            // 0x14/0x19 routed since re-pin be0029b: upstream tip
+            // `UdsSystem::addDiagJobs` registers both services.
+            0x14 => self.clear_dtc(request),
+            0x19 => self.read_dtc(request),
             0x22 => self.read_did(request),
             0x2e => self.write_did(request),
             0x31 => self.routine_control(request),
@@ -112,7 +124,36 @@ impl DiagnosticCore {
             return Self::nrc(0x10, Nrc::SubFunctionNotSupported);
         };
         self.session = session;
-        DiagnosticResponse::new(&[0x50, session.as_byte(), 0x00, 0x32, 0x01, 0xf4])
+        // P2* since re-pin be0029b: programming session answers 5000 x 10 ms
+        // (upstream `uds/UdsConfig.h` PROGRAMMING_DIAG_RESPONSE_PENDING).
+        let [p2_star_high, p2_star_low] = match session {
+            DiagSession::Programming => [0x13, 0x88],
+            DiagSession::Default | DiagSession::Extended => [0x01, 0xf4],
+        };
+        DiagnosticResponse::new(&[
+            0x50,
+            session.as_byte(),
+            0x00,
+            0x32,
+            p2_star_high,
+            p2_star_low,
+        ])
+    }
+
+    fn clear_dtc(&mut self, request: &[u8]) -> DiagnosticResponse {
+        let mut response = [0u8; DIAG_RESPONSE_CAPACITY];
+        match clear_diagnostic_information(request, &mut self.dem, &mut response) {
+            Ok(length) => DiagnosticResponse::new(&response[..length]),
+            Err(nrc) => Self::nrc(0x14, nrc),
+        }
+    }
+
+    fn read_dtc(&self, request: &[u8]) -> DiagnosticResponse {
+        let mut response = [0u8; DIAG_RESPONSE_CAPACITY];
+        match read_dtc_information(request, &self.dem, &mut response) {
+            Ok(length) => DiagnosticResponse::new(&response[..length]),
+            Err(nrc) => Self::nrc(0x19, nrc),
+        }
     }
 
     fn read_did(&self, request: &[u8]) -> DiagnosticResponse {
@@ -191,6 +232,11 @@ impl DiagnosticCore {
     pub fn restore_counter(&mut self, value: u32) {
         self.persistent_counter = value;
     }
+
+    /// Application access to the shared DEM (fault reporting and recovery).
+    pub fn dem_mut(&mut self) -> &mut DemManager<DEM_DTC_CAPACITY> {
+        &mut self.dem
+    }
 }
 
 impl Default for DiagnosticCore {
@@ -225,6 +271,79 @@ mod tests {
             &[0x62, 0xcf, 2, 3]
         );
         assert_eq!(core.dispatch_count(), 2);
+    }
+
+    #[test]
+    fn programming_session_reports_extended_response_pending() {
+        let mut core = DiagnosticCore::new();
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::DoCan,
+                &[0x10, 0x02],
+                Instant::from_nanos(1)
+            )
+            .bytes(),
+            &[0x50, 0x02, 0x00, 0x32, 0x13, 0x88]
+        );
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::DoCan,
+                &[0x10, 0x01],
+                Instant::from_nanos(2)
+            )
+            .bytes(),
+            &[0x50, 0x01, 0x00, 0x32, 0x01, 0xf4]
+        );
+    }
+
+    #[test]
+    fn dtc_services_are_routed_through_the_shared_dem() {
+        let mut core = DiagnosticCore::new();
+        // Empty DEM: status-mask report answers header only, clear-all is OK.
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::DoIp,
+                &[0x19, 0x02, 0xff],
+                Instant::from_nanos(1)
+            )
+            .bytes(),
+            &[0x59, 0x02, 0xff]
+        );
+        core.dem_mut().report_event(0x0012_3456, true);
+        let response = core.dispatch_at(
+            DiagnosticTransport::DoCan,
+            &[0x19, 0x02, 0xff],
+            Instant::from_nanos(2),
+        );
+        assert_eq!(&response.bytes()[..3], &[0x59, 0x02, 0xff]);
+        assert_eq!(&response.bytes()[3..6], &[0x12, 0x34, 0x56]);
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::Console,
+                &[0x19, 0x04, 0xff],
+                Instant::from_nanos(3)
+            )
+            .bytes(),
+            &[0x7f, 0x19, Nrc::SubFunctionNotSupported.as_byte()]
+        );
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::Console,
+                &[0x14, 0xff, 0xff, 0xff],
+                Instant::from_nanos(4)
+            )
+            .bytes(),
+            &[0x54]
+        );
+        assert_eq!(
+            core.dispatch_at(
+                DiagnosticTransport::Console,
+                &[0x14, 0x00, 0x00, 0x00],
+                Instant::from_nanos(5)
+            )
+            .bytes(),
+            &[0x7f, 0x14, Nrc::RequestOutOfRange.as_byte()]
+        );
     }
 
     #[test]

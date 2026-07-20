@@ -234,7 +234,9 @@ fn f09_oracle_output_is_deterministic_and_scrubbed() {
     let first = oracle_json("rust");
     let second = oracle_json("rust");
     assert_eq!(first, second);
-    assert!(first.contains("ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"));
+    // Pin update per docs/port/upstream-repin-decision-2026-07-19.md: the
+    // oracle provenance string must carry the re-pinned baseline SHA.
+    assert!(first.contains("be0029bbb79fe901048a24c2665f2ba854328734"));
     assert!(!first.contains("H:\\"));
 }
 

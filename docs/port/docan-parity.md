@@ -1,7 +1,13 @@
 # DoCAN parity map - packages E09-E13
 
-Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`, module
+Pinned upstream: `be0029bbb79fe901048a24c2665f2ba854328734`, module
 `libs/bsw/docan`.
+
+Re-pin note (2026-07-20): the oracle re-pin `ddbcf88` -> `be0029b` changed no
+DoCAN behavior — the upstream `libs/bsw/docan` `src`/`include` diff across the
+window is license-header-only (zero source drift, U01 section 3), so the DoCAN
+fixture records are unchanged and this parity map is not functionally reopened
+(see `repin-2026-07-20.md`).
 
 | Behavior | Rust implementation | Evidence |
 |---|---|---|

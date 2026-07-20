@@ -107,7 +107,7 @@ pub fn oracle_json(source: &str) -> String {
         concat!(
             "{{\n  \"protocol_version\": 1,\n",
             "  \"scenario\": \"reference-app-host\",\n",
-            "  \"upstream_commit\": \"ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77\",\n",
+            "  \"upstream_commit\": \"be0029bbb79fe901048a24c2665f2ba854328734\",\n",
             "  \"records\": [\n",
             "    {{\"sequence\":0,\"kind\":\"lifecycle\",\"source\":\"{}\",\"input\":\"startup\",\"output\":\"level-9\",\"state\":\"running\"}},\n",
             "    {{\"sequence\":1,\"kind\":\"console\",\"source\":\"{}\",\"input\":\"help\",\"output\":\"command-tree\",\"state\":\"running\"}},\n",

@@ -1,0 +1,14 @@
+{
+  "protocol_version": 1,
+  "scenario": "reference-app-host",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "records": [
+    {"sequence": 0, "kind": "lifecycle", "source": "openbsw", "input": "startup", "output": "level-9", "state": "running"},
+    {"sequence": 1, "kind": "console", "source": "openbsw", "input": "help", "output": "command-tree", "state": "running"},
+    {"sequence": 2, "kind": "can", "source": "openbsw", "input": "124:0102", "output": "125:0102", "state": "running"},
+    {"sequence": 3, "kind": "diagnostic", "source": "openbsw", "input": "docan:22cf01", "output": "62cf01:24-bytes", "state": "default"},
+    {"sequence": 4, "kind": "diagnostic", "source": "openbsw", "input": "doip:3e00", "output": "7e00", "state": "default"},
+    {"sequence": 5, "kind": "storage", "source": "openbsw", "input": "restart", "output": "value-restored", "state": "running"},
+    {"sequence": 6, "kind": "lifecycle", "source": "openbsw", "input": "shutdown", "output": "level-0", "state": "stopped"}
+  ]
+}

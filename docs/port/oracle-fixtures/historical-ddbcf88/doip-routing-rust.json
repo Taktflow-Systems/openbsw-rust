@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
   "scenario": "doip-routing-activation",
-  "upstream_commit": "be0029bbb79fe901048a24c2665f2ba854328734",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
   "records": [
     {"sequence": 0, "kind": "tcp", "source": "rust", "input": "02fd00050000000712340300000000", "output": "02fd000600000009123401231100000000", "state": "active"}
   ]

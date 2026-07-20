@@ -5,7 +5,7 @@
 - Execution checkpoint: 1,092/1,092 mandatory package-hours (100%) completed on 2026-07-19
 - Next package: none in mandatory scope; S01-S18 remain optional and require separate authorization
 - Workspace: `openbsw-rust`
-- Upstream parity baseline: Eclipse OpenBSW commit [`ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`](https://github.com/eclipse-openbsw/openbsw/commit/ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77), observed as the tip of `main` when this plan was written.
+- Upstream parity baseline: Eclipse OpenBSW commit [`be0029bbb79fe901048a24c2665f2ba854328734`](https://github.com/eclipse-openbsw/openbsw/commit/be0029bbb79fe901048a24c2665f2ba854328734), re-pinned 2026-07-20 by the governed re-pin tranche (`docs/port/repin-2026-07-20.md`, scope per `docs/port/upstream-repin-decision-2026-07-19.md`). The plan was written against, and the completed mandatory release was evidenced at, the previous baseline `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`; that release evidence is unchanged.
 
 The completed mandatory checkpoint is backed by the versioned G12-I09 matrix,
 two independent cache-free source roots, byte-identical pinned POSIX and MCU
@@ -467,3 +467,47 @@ The canonical publishable index is
 digests, maps, binaries, bench selectors, and raw logs remain only in ignored
 private CI evidence. Optional S32K148 packages S01-S18 are not part of this
 mandatory completion claim.
+
+## 14. Baseline re-pin record (2026-07-20)
+
+How to read this section: it records the executed U06 re-pin tranche and the
+two remaining bench-bound steps. The audience is a future AI worker landing
+cold; step structure follows the plan-writing rule; gates and dispositions
+live in `docs/port/repin-2026-07-20.md` and the parity docs it names.
+
+The pinned oracle moved `ddbcf88a62df -> be0029bbb79f` on 2026-07-20 under
+tranche packages U07-U16 (`docs/port/repin-2026-07-20.md`). Mandatory rows
+moved 37/37 -> 38/38 closed by one explicit decision (new upstream
+`libs/bsw/time` module covered by the existing native `bsw-time` port);
+package-hours remain 1,092/1,092; rows `bsw.routing` and `bsw.blob` were
+added as optional/excluded by explicit decision. The
+2026-07-18 release evidence remains the valid record at the old pin. The
+tranche stopped at the software boundary because no HIL bench was available;
+the open steps are:
+
+- **Step ID**: RP-HIL-01
+  - **Goal**: Re-verify the full physical matrix on both boards at the
+    `be0029b` baseline.
+  - **Inputs**: `hil/` suite, `tools/port/run_physical_matrix.ps1`, release
+    artifacts rebuilt at the re-pinned working tree, both reference boards.
+  - **Deliverables**: `docs/test-evidence/samples/repin-hil-matrix.json`
+    (schema per `tools/port/validate_evidence.py`).
+  - **Acceptance criteria**: all matrix roles pass at the thresholds in
+    `docs/port/test-guide.md`; evidence file validates.
+  - **Gate / review reference**: final-acceptance HIL gate
+    (`docs/port/final-acceptance-2026-07-18.md` scope) at the new pin.
+  - **Definition of done**: the evidence file exists and
+    `python tools/port/validate_evidence.py` passes with it included.
+- **Step ID**: RP-HIL-02
+  - **Goal**: Decide adopt/decline for STM32 CAN register-level gaps 33-37
+    with target verification available.
+  - **Inputs**: `docs/port/can-parity.md` 2026-07-20 deferral records,
+    `docs/port/stm32-can-drift-comparison-2026-07-19.md`, HIL bench.
+  - **Deliverables**: per-gap decision entries in `docs/port/can-parity.md`;
+    driver changes (if adopted) in `crates/bsw-bsp-stm32/src/` with tests;
+    updated `docs/test-evidence/samples/repin-hil-matrix.json` roles.
+  - **Acceptance criteria**: each gap carries adopt/decline with bus-off,
+    overflow, and recovery roles re-run on both boards for any adoption.
+  - **Gate / review reference**: same HIL gate as RP-HIL-01.
+  - **Definition of done**: no gap remains in "deferred" state in
+    `docs/port/can-parity.md`.

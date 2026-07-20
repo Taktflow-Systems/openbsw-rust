@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
   "scenario": "uds-dispatch-and-services",
-  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "upstream_commit": "be0029bbb79fe901048a24c2665f2ba854328734",
   "records": [
     {"sequence": 0, "kind": "dispatch", "source": "openbsw", "input": "physical:3e00", "output": "7e00", "state": "default"},
     {"sequence": 1, "kind": "dispatch", "source": "openbsw", "input": "functional:3e80", "output": "suppressed", "state": "default"},
@@ -10,6 +10,14 @@
     {"sequence": 4, "kind": "service", "source": "openbsw", "input": "3101123409", "output": "7101123409", "state": "routine-running"},
     {"sequence": 5, "kind": "timing", "source": "openbsw", "input": "clock:p2", "output": "7f3178", "state": "pending"},
     {"sequence": 6, "kind": "timing", "source": "openbsw", "input": "clock:p2-star", "output": "timeout", "state": "terminated"},
-    {"sequence": 7, "kind": "service", "source": "openbsw", "input": "1101", "output": "5101", "state": "reset-after-processed"}
+    {"sequence": 7, "kind": "service", "source": "openbsw", "input": "1101", "output": "5101", "state": "reset-after-processed"},
+    {"sequence": 8, "kind": "service", "source": "openbsw", "input": "1902ff", "output": "5902ff12345609", "state": "dtc-stored"},
+    {"sequence": 9, "kind": "service", "source": "openbsw", "input": "1902", "output": "7f1913", "state": "dtc-stored"},
+    {"sequence": 10, "kind": "service", "source": "openbsw", "input": "1904ff", "output": "7f1912", "state": "dtc-stored"},
+    {"sequence": 11, "kind": "service", "source": "openbsw", "input": "1906ff", "output": "7f1912", "state": "dtc-stored"},
+    {"sequence": 12, "kind": "service", "source": "openbsw", "input": "1900ff", "output": "7f1912", "state": "dtc-stored"},
+    {"sequence": 13, "kind": "service", "source": "openbsw", "input": "14ffff", "output": "7f1413", "state": "dtc-stored"},
+    {"sequence": 14, "kind": "service", "source": "openbsw", "input": "14000000", "output": "7f1431", "state": "dtc-stored"},
+    {"sequence": 15, "kind": "service", "source": "openbsw", "input": "14ffffff", "output": "54", "state": "dtc-cleared"}
   ]
 }

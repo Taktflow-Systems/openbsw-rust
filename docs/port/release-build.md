@@ -1,7 +1,10 @@
 # Reproducible release build
 
 Release baseline: Rust 1.94, locked `Cargo.lock`, pinned upstream commit
-`ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`, LTO, one codegen unit,
+`be0029bbb79fe901048a24c2665f2ba854328734` (re-pinned 2026-07-20; the
+completed 2026-07-18 mandatory release was built against the previous pin
+`ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77` and its evidence is unchanged),
+LTO, one codegen unit,
 `opt-level=s`, aborting panic and overflow checks. The Rust workspace may be
 dirty during tranche review. `create_clean_build_roots.ps1` reconstructs two
 immutable roots from the recorded base revision plus a binary source patch and

@@ -8,7 +8,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$PinnedCommit = 'ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77'
+# Post-drift upstream (2026-06-02 tip): minimum C++17, Bazel-primary layout
+# with CMake presets retained, and middleware build-time code generation
+# (jinja2cpp.py via add_custom_command; needs python3 with jinja2 + yaml in
+# the build environment). The CMake preset path below remains the supported
+# oracle build; Bazel is not required to build or test the oracle.
+$PinnedCommit = 'be0029bbb79fe901048a24c2665f2ba854328734'
 $Repository = 'https://github.com/eclipse-openbsw/openbsw.git'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Checkout = Join-Path $RepoRoot 'target\oracle\openbsw'

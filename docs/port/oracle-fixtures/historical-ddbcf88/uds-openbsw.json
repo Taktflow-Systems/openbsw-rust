@@ -1,0 +1,15 @@
+{
+  "protocol_version": 1,
+  "scenario": "uds-dispatch-and-services",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
+  "records": [
+    {"sequence": 0, "kind": "dispatch", "source": "openbsw", "input": "physical:3e00", "output": "7e00", "state": "default"},
+    {"sequence": 1, "kind": "dispatch", "source": "openbsw", "input": "functional:3e80", "output": "suppressed", "state": "default"},
+    {"sequence": 2, "kind": "service", "source": "openbsw", "input": "1003", "output": "5003003201f4", "state": "extended"},
+    {"sequence": 3, "kind": "service", "source": "openbsw", "input": "22f190f191", "output": "62f1904142f1914344", "state": "extended"},
+    {"sequence": 4, "kind": "service", "source": "openbsw", "input": "3101123409", "output": "7101123409", "state": "routine-running"},
+    {"sequence": 5, "kind": "timing", "source": "openbsw", "input": "clock:p2", "output": "7f3178", "state": "pending"},
+    {"sequence": 6, "kind": "timing", "source": "openbsw", "input": "clock:p2-star", "output": "timeout", "state": "terminated"},
+    {"sequence": 7, "kind": "service", "source": "openbsw", "input": "1101", "output": "5101", "state": "reset-after-processed"}
+  ]
+}

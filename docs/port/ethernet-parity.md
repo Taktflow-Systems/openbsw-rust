@@ -1,8 +1,12 @@
 # Ethernet (cpp2ethernet / lwipSocket) parity map — packages D17-D21
 
-Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`, modules
-`libs/bsw/cpp2ethernet` and `libs/bsw/lwipSocket`. Every upstream public
-surface is assigned below. POSIX adapters (D18/D19) and the lwIP socket
+Pinned upstream: `be0029bbb79fe901048a24c2665f2ba854328734`, modules
+`libs/bsw/cpp2ethernet` and `libs/bsw/lwipSocket`.
+(Re-pinned 2026-07-20 from `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`; see
+the re-pin section below and docs/port/repin-2026-07-20.md.)
+
+Every upstream public surface is assigned below.
+POSIX adapters (D18/D19) and the lwIP socket
 boundary with its fake backend (D20) live in `crates/bsw-ethernet`.
 
 | Upstream API | Assignment | Rust location | Notes / evidence |
@@ -28,6 +32,34 @@ boundary with its fake backend (D20) live in `crates/bsw-ethernet`.
 | `lwipSocket/udp/LwipDatagramSocket.h` | port boundary | `bsw-ethernet::lwip::SocketApi` (datagram ops) | same boundary trait family. |
 | `lwipSocket/netif/LwipNetworkInterface.h` | port | `bsw-ethernet::network_interface::NetworkInterface` | lifecycle init/run/shutdown, bounded address-change publication, logging, clean reconfiguration, and restart recovery. |
 | `lwipSocket/utils/LwipHelper.h`, `LwipLogger.h`, `TaskAssert.h` | excluded | — | C-side glue; not applicable to the Rust boundary. |
+
+## Re-pin 2026-07-20: dispositions at be0029b (rows D17-D21)
+
+Oracle re-pin ddbcf88a -> `be0029bbb79fe901048a24c2665f2ba854328734`
+(be0029b), governed by docs/port/upstream-repin-decision-2026-07-19.md;
+tranche record: docs/port/repin-2026-07-20.md. Relevant upstream changes on
+the `bsw.lwipSocket`/`bsw.cpp2ethernet` surface (366d993e lwIP netif kept
+persistent across lifecycle transitions, b119bf9b Tap restart fix on POSIX,
+and the netif config registry surface touched by baa9589d - see the
+upstream-drift-survey-2026-07-19.md cpp2ethernet/lwipSocket sections):
+
+- **Observable contract - conforming at the tip.** Network echo (UDP and
+  TCP) survives a console reboot and a full shutdown/start cycle. Pinned by
+  the promoted baseline test
+  `crates/openbsw-reference-app/tests/baseline_be0029b.rs`
+  (`baseline_366d993e_network_echo_survives_reboot_and_full_restart`) and
+  matching tip behavior.
+- **NetworkInterfaceConfigRegistry - recorded native difference.** The
+  upstream netif config registry
+  (`cpp2ethernet/include/ip/INetworkInterfaceConfigRegistry.h`, plumbed at
+  the tip from `EthernetSystem` into `DoIpServerSystem` as
+  `netifConfigRegistry` at run level 6) is NOT modeled by the port. The
+  Rust POSIX composition configures addresses directly: DoIP discovery uses
+  its own address configuration, and the port-side
+  `network_interface::NetworkInterface` keeps its own bounded
+  `ConfigRegistry` (D21 below) rather than mirroring the upstream registry
+  re-plumbing. The observable network behavior above is the parity key; the
+  registry surface itself stays a native difference on the D17-D21 rows.
 
 ## POSIX adapters (D18/D19)
 

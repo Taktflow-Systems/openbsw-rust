@@ -1,29 +1,27 @@
-//! Drift-derived transport-router vectors, NOT part of the pinned-oracle
-//! evidence.
+//! Pinned-baseline transport-router parity evidence at upstream
+//! `be0029bbb79fe901048a24c2665f2ba854328734` (`be0029b`).
 //!
-//! Derived from upstream drift commit (drift tip `be0029b`):
+//! Promoted 2026-07-20 from the 2026-07-19 drift tranche
+//! (`drift_be0029b.rs`) as part of the governed oracle re-pin
+//! `ddbcf88` -> `be0029b`. Upstream source commit at the pin:
 //! - `120f5688` Add tester address translation to referenceApp TP-Router
 //!
-//! That commit renames the logical-address converter API to 2-byte/1-byte
-//! terminology, introduces a bounded 2-byte <-> 1-byte tester-address
-//! mapping table (referenceApp: `0x0EF0..0x0EFB` <-> `0x00F0..0x00FB`) in
-//! integrator-owned transport configuration, and makes the simple TP-router
-//! rewrite source/target addresses at 1-byte-bus boundaries
+//! At the `be0029b` baseline, upstream's simple TP-router rewrites
+//! source/target addresses through a bounded 2-byte <-> 1-byte
+//! tester-address mapping table (referenceApp: `0x0EF0..0x0EFB` <->
+//! `0x00F0..0x00FB`) at 1-byte-bus boundaries
 //! (`TransportRouterSimpleTest.cpp` round-trip vectors).
 //!
-//! The Rust port's `SimpleRouter` deliberately routes full 16-bit logical
-//! addresses without a per-boundary translation table (recorded as
-//! divergence D5 in `composition-drift-review-2026-07-19.md`,
-//! upstream-behavior-change, re-pin-dependent). These tests therefore pin
-//! the CURRENT pinned-parity router behavior (addresses pass through
-//! unchanged at bus boundaries) against the upstream round-trip vectors,
-//! and demonstrate that the post-drift translation-table semantics are
-//! expressible as integrator configuration on the current public API.
-//!
-//! The release parity baseline remains the pinned upstream commit
-//! `ddbcf88`; these tests import post-drift upstream-demonstrated behavior
-//! for comparison only and do not move that baseline. See
-//! `docs/port/drift-vectors-2026-07-19.md`.
+//! Recorded parity decision (re-pin disposition, see the 2026-07-20
+//! re-pin section of `docs/port/doip-parity.md` and
+//! `docs/port/repin-2026-07-20.md`; formerly divergence D5 in
+//! `composition-drift-review-2026-07-19.md` / divergence 6 in
+//! `drift-vectors-2026-07-19.md`): the Rust port's `SimpleRouter` KEEPS
+//! full-16-bit logical-address forwarding without a per-boundary
+//! translation table as a deliberate native difference. The end-to-end
+//! round-trip observable matches upstream, and the bounded translation
+//! table remains expressible as integrator configuration on the current
+//! public API (proven below). No production code change.
 
 use bsw_transport::simple_router::{
     SimpleRoute, SimpleRouteResult, SimpleRouter, TransportEndpoint,
@@ -79,21 +77,20 @@ fn message(source: u16, target: u16, payload: &[u8]) -> TransportMessage<64> {
     message
 }
 
-/// Upstream drift vector (`TransportRouterSimpleTest.cpp`,
+/// Upstream baseline vector (`TransportRouterSimpleTest.cpp`,
 /// `requestFromETH_responseFromSelfDiag_roundTrip`): a request from the
 /// 2-byte ETH_0 bus is forwarded to the 1-byte SELFDIAG bus and the reply
 /// comes back to the tester on ETH_0.
 ///
-/// Post-drift upstream rewrites addresses at the 1-byte boundary (SELFDIAG
-/// sees source 0x00F0); the pinned baseline and the Rust port do not. This
-/// test asserts the current pinned-parity behavior: full 16-bit addresses
-/// pass through both boundaries unchanged, and the end-to-end observable
-/// (the reply reaches the tester at its own 2-byte address on ETH_0) is
-/// identical to the post-drift upstream round trip. The per-boundary
-/// rewrite itself is upstream-behavior-change, re-pin-dependent (U04
-/// divergence D5).
+/// At `be0029b` upstream rewrites addresses at the 1-byte boundary
+/// (SELFDIAG sees source 0x00F0); the Rust port does not. This test
+/// asserts the port's recorded parity decision (deliberate native
+/// difference, 2026-07-20 re-pin section of `docs/port/doip-parity.md`):
+/// full 16-bit addresses pass through both boundaries unchanged, and the
+/// end-to-end observable (the reply reaches the tester at its own 2-byte
+/// address on ETH_0) is identical to the upstream baseline round trip.
 #[test]
-fn drift_120f5688_router_boundary_round_trip_forwards_addresses_unchanged() {
+fn baseline_120f5688_router_boundary_round_trip_forwards_addresses_unchanged() {
     let router = SimpleRouter::new([
         // Inbound: external request from ETH_0 to the ECU goes to SELFDIAG.
         SimpleRoute {
@@ -120,8 +117,8 @@ fn drift_120f5688_router_boundary_round_trip_forwards_addresses_unchanged() {
         router.route(ETH_0, &request, &mut layers),
         SimpleRouteResult::Routed(1)
     );
-    // Pinned parity: SELFDIAG sees the unchanged 2-byte tester source
-    // (post-drift upstream would deliver source 0x00F0 here).
+    // Recorded parity decision: SELFDIAG sees the unchanged 2-byte tester
+    // source (baseline upstream delivers source 0x00F0 here).
     assert_eq!(
         selfdiag.delivered,
         [(TESTER_2BYTE, ECU_ADDRESS, vec![0x22, 0xf1, 0x90])]
@@ -136,7 +133,7 @@ fn drift_120f5688_router_boundary_round_trip_forwards_addresses_unchanged() {
         router.route(SELFDIAG, &reply, &mut layers),
         SimpleRouteResult::Routed(1)
     );
-    // End-to-end observable matches the post-drift upstream round trip:
+    // End-to-end observable matches the upstream baseline round trip:
     // the tester receives the reply at its own 2-byte address on ETH_0.
     assert_eq!(
         eth.delivered,
@@ -144,13 +141,13 @@ fn drift_120f5688_router_boundary_round_trip_forwards_addresses_unchanged() {
     );
 }
 
-/// Upstream drift vector (`TransportRouterSimpleTest.cpp`,
+/// Upstream baseline vector (`TransportRouterSimpleTest.cpp`,
 /// `messageReceived_fromSelfDiag_noReplyTarget`): a SELFDIAG message with
 /// no external request to reply to is rejected (`RECEIVED_ERROR`). The
 /// port's declarative analog: with no declared SELFDIAG return route the
 /// router reports `NoRoute` and delivers nothing.
 #[test]
-fn drift_120f5688_selfdiag_reply_without_declared_return_route_is_not_routed() {
+fn baseline_120f5688_selfdiag_reply_without_declared_return_route_is_not_routed() {
     let router = SimpleRouter::new([SimpleRoute {
         source_bus: Some(ETH_0),
         target: LogicalAddress::new(ECU_ADDRESS),
@@ -171,11 +168,11 @@ fn drift_120f5688_selfdiag_reply_without_declared_return_route_is_not_routed() {
 }
 
 // ---------------------------------------------------------------------------
-// Integrator-configuration expressibility of the post-drift translation
+// Integrator-configuration expressibility of the baseline translation
 // ---------------------------------------------------------------------------
 
 /// One 2-byte <-> 1-byte tester-address pair (upstream `LogicalAddress`
-/// struct, post-drift field names `address2Byte`/`address1Byte`).
+/// struct, baseline field names `address2Byte`/`address1Byte`).
 struct TesterAddressPair {
     two_byte: LogicalAddress,
     one_byte: LogicalAddress,
@@ -188,7 +185,7 @@ const fn pair(two_byte: u16, one_byte: u16) -> TesterAddressPair {
     }
 }
 
-/// The post-drift referenceApp mapping table
+/// The baseline referenceApp mapping table
 /// (`executables/referenceApp/transportConfiguration`, `120f5688`):
 /// twelve bounded pairs `0x0EF0..0x0EFB` <-> `0x00F0..0x00FB`.
 const TESTER_ADDRESS_RANGE: [TesterAddressPair; 12] = [
@@ -231,12 +228,14 @@ fn convert_1byte_to_2byte(address: LogicalAddress) -> LogicalAddress {
         .map_or(address, |entry| entry.two_byte)
 }
 
-/// Upstream drift vectors (`TesterAddressTest.cpp` and the referenceApp
+/// Upstream baseline vectors (`TesterAddressTest.cpp` and the referenceApp
 /// table of `120f5688`): the bounded 2-byte <-> 1-byte translation is
 /// expressible as integrator configuration on the current public
-/// `LogicalAddress` API without any production change.
+/// `LogicalAddress` API without any production change. This proof carries
+/// the recorded parity decision that keeps full-16-bit forwarding in the
+/// port while leaving the baseline translation table to integrators.
 #[test]
-fn drift_120f5688_tester_address_translation_is_expressible_as_integrator_config() {
+fn baseline_120f5688_tester_address_translation_is_expressible_as_integrator_config() {
     // All twelve pairs round-trip in both directions, and every 1-byte side
     // actually fits one byte (`as_u8` is total on the 1-byte column).
     for entry in &TESTER_ADDRESS_RANGE {
@@ -262,9 +261,9 @@ fn drift_120f5688_tester_address_translation_is_expressible_as_integrator_config
     let functional = LogicalAddress::new(0x00DF);
     assert_eq!(convert_1byte_to_2byte(functional), functional);
 
-    // The post-drift set is bounded, not a range: 0x0EE0 was inside the
-    // pinned baseline's DoIP tester range (0x0EE0..0x0EFD) but has no table
-    // entry and now passes through unchanged.
+    // The baseline set is bounded, not a range: 0x0EE0 was inside the
+    // former `ddbcf88` baseline's DoIP tester range (0x0EE0..0x0EFD) but
+    // has no table entry and now passes through unchanged.
     let outside_bounded_set = LogicalAddress::new(0x0EE0);
     assert_eq!(
         convert_2byte_to_1byte(outside_bounded_set),
@@ -272,12 +271,12 @@ fn drift_120f5688_tester_address_translation_is_expressible_as_integrator_config
     );
 
     // Symmetrically, 0x00FC matches the 0x00F_ prefix guard but has no
-    // table entry (the pinned 1-byte range reached 0x00FD).
+    // table entry (the former `ddbcf88` 1-byte range reached 0x00FD).
     let unmapped_one_byte = LogicalAddress::new(0x00FC);
     assert_eq!(convert_1byte_to_2byte(unmapped_one_byte), unmapped_one_byte);
 
-    // Bounded-set membership replaces the pinned range checks: 0x0EF5 is a
-    // tester in both models, 0x0EE5 only under the pinned ranges.
+    // Bounded-set membership replaces the former `ddbcf88` range checks:
+    // 0x0EF5 is a tester in both models, 0x0EE5 only under those ranges.
     let in_both = LogicalAddress::new(0x0EF5);
     let only_pinned_range = LogicalAddress::new(0x0EE5);
     assert!(TESTER_ADDRESS_RANGE

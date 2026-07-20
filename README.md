@@ -2,7 +2,7 @@
 
 This workspace is an allocation-free Rust port of the mandatory behavior
 surveyed at Eclipse openBSW commit
-`ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`. It provides a POSIX reference
+`be0029bbb79fe901048a24c2665f2ba854328734`. It provides a POSIX reference
 application and shared production compositions for STM32F413 and STM32G474.
 
 Start with:

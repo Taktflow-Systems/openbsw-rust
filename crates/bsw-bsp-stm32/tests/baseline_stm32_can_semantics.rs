@@ -1,10 +1,13 @@
-//! Drift-labeled contract tests for the STM32 CAN health/queue seams.
+//! Pinned-baseline parity evidence for the STM32 CAN health/queue seams.
 //!
-//! Derived from upstream drift commits `1a11d135` ("Add STM32 CAN drivers and
-//! bxCAN transceiver"), `be0029bb` ("Add STM32 FDCAN transceiver adapter"),
-//! and `f2f01102` ("Fix STM32 CAN unit tests on 64-bit hosts"), drift tip
-//! `be0029bb`. These are NOT pinned-oracle evidence: the pinned oracle
-//! remains `ddbcf88a` and is not moved by this file.
+//! Pinned upstream baseline: `be0029bbb79fe901048a24c2665f2ba854328734`
+//! ("Add STM32 FDCAN transceiver adapter"). Promoted 2026-07-20 from the
+//! 2026-07-19 drift tranche (formerly `drift_stm32_can_semantics.rs`; the
+//! oracle re-pin `ddbcf88a` -> `be0029b` made these contracts baseline
+//! behavior, see `docs/port/repin-2026-07-20.md`). The upstream behaviors
+//! pinned here entered upstream in commits `1a11d135` ("Add STM32 CAN
+//! drivers and bxCAN transceiver"), `be0029bb`, and `f2f01102` ("Fix STM32
+//! CAN unit tests on 64-bit hosts").
 //!
 //! Only the feature-ungated host-testable modules (`can_health`, `can_isr`)
 //! are exercised, following this crate's existing host-test convention
@@ -52,7 +55,7 @@ const FDCAN_IR: usize = 0x050;
 const BXCAN_MSR: usize = 0x004;
 const BXCAN_ESR: usize = 0x018;
 
-/// Upstream drift `1a11d135`: bxCAN ESR/MSR are status registers that the
+/// Upstream baseline `1a11d135`: bxCAN ESR/MSR are status registers that the
 /// adapter only reads (`isBusOff()` reads `ESR.BOFF`; error counters come
 /// from ESR fields); no read-modify-write is ever performed on them.
 ///
@@ -78,7 +81,7 @@ fn bxcan_status_decode_is_read_only() {
     assert_eq!(bank.values[BXCAN_ESR / 4], (1 << 2) | (1 << 1) | 0x30);
 }
 
-/// Upstream drift `1a11d135`/`f2f01102`: rc_w1 interrupt registers are
+/// Upstream baseline `1a11d135`/`f2f01102`: rc_w1 interrupt registers are
 /// cleared with a direct write of the read snapshot, never a
 /// read-modify-write ("a read-modify-write would write back any flag that
 /// happens to be set and silently clear it").
@@ -106,15 +109,16 @@ fn fdcan_ir_acknowledge_is_single_snapshot_write_back() {
     assert_eq!(again, CanInterruptFlags::default());
 }
 
-/// Upstream drift `1a11d135`: when the software RX queue is full the ISR
+/// Upstream baseline `1a11d135`: when the software RX queue is full the ISR
 /// releases the hardware FIFO entry without storing it — the newest frame is
 /// dropped, previously queued frames are preserved in FIFO order, and the
 /// drain continues.
 ///
 /// The Rust `InterruptQueue` pins the same drop-newest policy and adds
 /// explicit accounting (`dropped()`), which upstream leaves silent. One
-/// deliberate difference is pinned here: the Rust SPSC ring reserves one
-/// slot, so `InterruptQueue<N>` stores N-1 frames (upstream's 32-entry array
+/// recorded parity decision is pinned here (`docs/port/can-parity.md`,
+/// comparison row 30): the Rust SPSC ring reserves one slot, so
+/// `InterruptQueue<N>` stores N-1 frames (upstream's 32-entry array
 /// stores 32).
 #[test]
 fn rx_queue_full_drops_newest_preserves_order_and_accounts() {
@@ -149,7 +153,7 @@ fn rx_queue_full_drops_newest_preserves_order_and_accounts() {
     assert_eq!(queue.dropped(), 2, "drop count is cumulative, not reset");
 }
 
-/// Upstream drift `1a11d135`/`be0029bb`: the transceivers poll bus-off every
+/// Upstream baseline `1a11d135`/`be0029bb`: the transceivers poll bus-off every
 /// 10 ms; on bus-off the logical state leaves OPEN, and it only returns after
 /// the controller has actually recovered. On FDCAN the M_CAN core never
 /// recovers by itself — the caller must re-init after its own delay policy.
@@ -192,11 +196,12 @@ fn bus_off_supervision_uses_exact_deadline_and_monotonic_overflow_accounting() {
     assert_eq!(health.queue_overflows(), 9);
 }
 
-/// Upstream drift `1a11d135`: the bxCAN adapter only exposes `isBusOff()`;
+/// Upstream baseline `1a11d135`: the bxCAN adapter only exposes `isBusOff()`;
 /// error-passive is observable solely through the raw REC/TEC counters. The
 /// Rust port maps the ESR error-passive flag into the transceiver state as
-/// well — a strictly richer health surface. This test pins that mapping so
-/// the strengthening cannot silently regress.
+/// well — a strictly richer health surface, recorded as a parity decision
+/// (`docs/port/can-parity.md`, comparison row 18). This test pins that
+/// mapping so the strengthening cannot silently regress.
 #[test]
 fn error_passive_flag_maps_to_passive_state() {
     let flags = CanInterruptFlags::from_bxcan(0, 1 << 1); // ESR.EPVF

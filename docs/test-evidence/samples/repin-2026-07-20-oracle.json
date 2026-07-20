@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "evidence_id": "repin-2026-07-20-oracle",
+  "package_ids": ["U07", "U08"],
+  "started_at": "2026-07-20T06:45:00Z",
+  "source": {
+    "rust_revision": "working-tree",
+    "openbsw_revision": "be0029bbb79fe901048a24c2665f2ba854328734"
+  },
+  "environment": {
+    "os": "linux-ubuntu-24.04",
+    "rust": "1.94.0",
+    "python": "3.12.3",
+    "cmake": "3.28.3",
+    "compiler": "gcc-13.3"
+  },
+  "commands": [
+    "tools/port/openbsw_oracle.sh Checkout",
+    "tools/port/openbsw_oracle.sh Test 6",
+    "tools/port/openbsw_oracle.sh Reference 6"
+  ],
+  "results": {
+    "outcome": "passed",
+    "passed": 1813,
+    "failed": 0,
+    "skipped": 0,
+    "errors": 0
+  },
+  "artifacts": []
+}

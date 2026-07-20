@@ -2,14 +2,14 @@
 
 > Generated from `parity-manifest.json` by `tools/port/generate_status.py`; do not edit by hand.
 
-Pinned upstream: `ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77`
+Pinned upstream: `be0029bbb79fe901048a24c2665f2ba854328734`
 
-Mandatory rows closed: **37/37**. A row closes only as `done` or `native replacement`; `partial` never counts.
+Mandatory rows closed: **38/38**. A row closes only as `done` or `native replacement`; `partial` never counts.
 
 | Scope | Done | Native replacement | Partial | Missing | Excluded |
 |---|---:|---:|---:|---:|---:|
-| mandatory | 23 | 14 | 0 | 0 | 0 |
-| optional | 0 | 0 | 0 | 0 | 1 |
+| mandatory | 24 | 14 | 0 | 0 | 0 |
+| optional | 0 | 0 | 0 | 0 | 3 |
 | project extension | 3 | 0 | 0 | 0 | 0 |
 
 | Row | Status | Strategy | Rust crates | Owner packages |
@@ -25,7 +25,7 @@ Mandatory rows closed: **37/37**. A row closes only as `done` or `native replace
 | `bsw.cpp2ethernet` | done | port behavior | `bsw-ethernet` | D17-D21 |
 | `bsw.docan` | done | port behavior | `bsw-docan` | E09-E13 |
 | `bsw.doip` | done | port behavior | `bsw-doip` | E26-E31 |
-| `bsw.estd` | native replacement | native Rust fixed-capacity types | `bsw-estd` | C02-C04 |
+| `bsw.estd` | native replacement | native Rust fixed-capacity types (upstream removed libs/bsw/estd at be0029b in favor of bundled ETL; the native replacement is unaffected and the counterpart mapping is recorded in estd-parity.md) | `bsw-estd` | C02-C04 |
 | `bsw.io` | done | port behavior | `bsw-io` | D04-D05 |
 | `bsw.lifecycle` | done | port behavior | `bsw-lifecycle` | D01-D02 |
 | `bsw.logger` | native replacement | native replacement | `bsw-logger` | C13-C14 |
@@ -55,3 +55,6 @@ Mandatory rows closed: **37/37**. A row closes only as `done` or `native replace
 | `extension.com` | done | retain and harden | `bsw-com` | E32-E33 |
 | `extension.e2e` | done | label and harden | `bsw-util`, `bsw-com` | E34 |
 | `extension.can-fd` | done | retain and harden | `bsw-can` | D14 |
+| `bsw.routing` | excluded | new post-pin PDU-routing subsystem (RoutingSystem, run level 6); excluded from the mandatory surface at the 2026-07-20 re-pin pending a dedicated tranche | — | U16 |
+| `bsw.blob` | excluded | new post-pin blob-transfer subsystem introduced with routing; excluded from the mandatory surface at the 2026-07-20 re-pin pending a dedicated tranche | — | U16 |
+| `bsw.time` | done | new upstream module at be0029b (TimestampProvider extraction, 9d3e89a2); covered by the existing native time port | `bsw-time` | U13 |

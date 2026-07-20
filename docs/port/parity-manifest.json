@@ -2,7 +2,7 @@
   "schema_version": 1,
   "baseline": {
     "repository": "https://github.com/eclipse-openbsw/openbsw",
-    "commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77"
+    "commit": "be0029bbb79fe901048a24c2665f2ba854328734"
   },
   "status_values": [
     "done",
@@ -251,10 +251,10 @@
     },
     {
       "id": "bsw.estd",
-      "upstream_path": "libs/bsw/estd",
+      "upstream_path": "libs/3rdparty/etl",
       "scope": "mandatory",
       "status": "native replacement",
-      "strategy": "native Rust fixed-capacity types",
+      "strategy": "native Rust fixed-capacity types (upstream removed libs/bsw/estd at be0029b in favor of bundled ETL; the native replacement is unaffected and the counterpart mapping is recorded in estd-parity.md)",
       "rust_crates": [
         "bsw-estd"
       ],
@@ -859,6 +859,60 @@
         "crates/bsw-can/src/frame.rs"
       ],
       "candidate_test_roots": []
+    },
+    {
+      "id": "bsw.routing",
+      "upstream_path": "libs/bsw/routing",
+      "scope": "optional",
+      "status": "excluded",
+      "strategy": "new post-pin PDU-routing subsystem (RoutingSystem, run level 6); excluded from the mandatory surface at the 2026-07-20 re-pin pending a dedicated tranche",
+      "rust_crates": [],
+      "owner_packages": [
+        "U16"
+      ],
+      "evidence": [
+        "docs/port/repin-2026-07-20.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/routing/test"
+      ]
+    },
+    {
+      "id": "bsw.blob",
+      "upstream_path": "libs/bsw/blob",
+      "scope": "optional",
+      "status": "excluded",
+      "strategy": "new post-pin blob-transfer subsystem introduced with routing; excluded from the mandatory surface at the 2026-07-20 re-pin pending a dedicated tranche",
+      "rust_crates": [],
+      "owner_packages": [
+        "U16"
+      ],
+      "evidence": [
+        "docs/port/repin-2026-07-20.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/blob/test"
+      ]
+    },
+    {
+      "id": "bsw.time",
+      "upstream_path": "libs/bsw/time",
+      "scope": "mandatory",
+      "status": "done",
+      "strategy": "new upstream module at be0029b (TimestampProvider extraction, 9d3e89a2); covered by the existing native time port",
+      "rust_crates": [
+        "bsw-time"
+      ],
+      "owner_packages": [
+        "U13"
+      ],
+      "evidence": [
+        "crates/bsw-time",
+        "docs/port/repin-2026-07-20.md"
+      ],
+      "candidate_test_roots": [
+        "libs/bsw/time/test"
+      ]
     }
   ]
 }

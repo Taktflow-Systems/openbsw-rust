@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
   "scenario": "docan-state-machine",
-  "upstream_commit": "be0029bbb79fe901048a24c2665f2ba854328734",
+  "upstream_commit": "ddbcf88a62dfcddb1eb07f868ba6412bec1ebf77",
   "records": [
     {"sequence": 0, "kind": "tx", "source": "rust", "input": "start:20", "output": "first-frame", "state": "wait-confirmation"},
     {"sequence": 1, "kind": "tx", "source": "rust", "input": "confirm", "output": "none", "state": "wait-flow-control"},

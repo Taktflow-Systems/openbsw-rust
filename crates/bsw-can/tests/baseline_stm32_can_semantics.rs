@@ -1,12 +1,15 @@
-//! Drift-labeled contract tests for STM32 CAN adapter semantics.
+//! Pinned-baseline parity evidence for STM32 CAN adapter semantics.
 //!
-//! Derived from upstream drift commits `1a11d135` ("Add STM32 CAN drivers and
-//! bxCAN transceiver"), `be0029bb` ("Add STM32 FDCAN transceiver adapter"),
-//! and `6cafa673` ("Fix logger to work for extended canId"), drift tip
-//! `be0029bb`. These are NOT pinned-oracle evidence: the pinned oracle
-//! remains `ddbcf88a` and is not moved by this file. Each test pins a
-//! behavioral contract that the upstream STM32 adapters demonstrate and the
-//! Rust port already intends (see `docs/port/can-parity.md` and
+//! Pinned upstream baseline: `be0029bbb79fe901048a24c2665f2ba854328734`
+//! ("Add STM32 FDCAN transceiver adapter"). Promoted 2026-07-20 from the
+//! 2026-07-19 drift tranche (formerly `drift_stm32_can_semantics.rs`; the
+//! oracle re-pin `ddbcf88a` -> `be0029b` made these contracts baseline
+//! behavior, see `docs/port/repin-2026-07-20.md`). The upstream behaviors
+//! pinned here entered upstream in commits `1a11d135` ("Add STM32 CAN
+//! drivers and bxCAN transceiver"), `be0029bb`, and `6cafa673` ("Fix logger
+//! to work for extended canId"). Each test pins a behavioral contract of
+//! the upstream STM32 adapters that the Rust port implements (see
+//! `docs/port/can-parity.md` and
 //! `docs/port/stm32-can-drift-comparison-2026-07-19.md`).
 
 use bsw_can::can_id::{CanId, EXTENDED_QUALIFIER_BIT};
@@ -18,16 +21,17 @@ use bsw_time::{Duration, Instant};
 
 type Trx = AbstractTransceiver<8>;
 
-/// Upstream drift `1a11d135`/`be0029bb`: `BxCanTransceiver::init()` and
+/// Upstream baseline `1a11d135`/`be0029bb`: `BxCanTransceiver::init()` and
 /// `FdCanTransceiver::init()` return `CAN_ERR_ILLEGAL_STATE` unless the
 /// transceiver is CLOSED; `mute()` requires OPEN; `unmute()` requires MUTED;
 /// `close()` from CLOSED succeeds (idempotent); the bus-off supervision task
 /// moves MUTED back to OPEN on recovery.
 ///
-/// The Rust state machine enforces the same guard set. One deliberate
-/// difference is pinned here: upstream `open()` also accepts CLOSED and
-/// re-runs device init internally, while the Rust port requires an explicit
-/// `init()` first (Closed -> Open is rejected).
+/// The Rust state machine enforces the same guard set. One recorded parity
+/// decision is pinned here (`docs/port/can-parity.md`, comparison row 21):
+/// upstream `open()` also accepts CLOSED and re-runs device init internally,
+/// while the Rust port requires an explicit `init()` first (Closed -> Open
+/// is rejected).
 #[test]
 fn lifecycle_guards_match_upstream_adapter_state_machine() {
     let mut t = Trx::new(0);
@@ -52,12 +56,13 @@ fn lifecycle_guards_match_upstream_adapter_state_machine() {
     assert_eq!(t.transition_to_closed(), ErrorCode::Ok);
     assert_eq!(t.state(), State::Closed);
 
-    // Documented difference: Rust rejects Closed -> Open without init();
-    // upstream open() would re-init from CLOSED instead.
+    // Recorded parity decision (can-parity.md, comparison row 21): Rust
+    // rejects Closed -> Open without init(); upstream open() would re-init
+    // from CLOSED instead.
     assert_eq!(t.transition_to_open(), ErrorCode::IllegalState);
 }
 
-/// Upstream drift `be0029bb`/`1a11d135`: the M_CAN core behind FDCAN has no
+/// Upstream baseline `be0029bb`/`1a11d135`: the M_CAN core behind FDCAN has no
 /// automatic bus-off recovery (no bxCAN-style ABOM); on bus-off the hardware
 /// latches and the caller must explicitly re-init to rejoin the bus.
 ///
@@ -88,9 +93,10 @@ fn bus_off_is_latched_until_explicit_timed_recovery() {
     assert_eq!(tracker.record_rx_error(), None);
     assert_eq!(tracker.state(), TransceiverState::BusOff);
 
-    // No implicit recovery: polling without begin_recovery never rejoins
-    // (contrast with upstream bxCAN ABOM hardware auto-recovery; the Rust
-    // port deliberately uses explicit timed recovery on both controllers).
+    // No implicit recovery: polling without begin_recovery never rejoins.
+    // Recorded parity decision (can-parity.md, comparison row 27): upstream
+    // bxCAN relies on ABOM hardware auto-recovery; the Rust port uses
+    // explicit timed recovery on both controllers.
     assert_eq!(
         tracker.poll_recovery(Instant::from_nanos(u64::MAX / 2)),
         None
@@ -108,7 +114,7 @@ fn bus_off_is_latched_until_explicit_timed_recovery() {
     assert_eq!((tracker.tec(), tracker.rec()), (0, 0));
 }
 
-/// Upstream drift `1a11d135`: the ISR-level software bit-field filter is
+/// Upstream baseline `1a11d135`: the ISR-level software bit-field filter is
 /// indexed by CAN ID and therefore applies to standard 11-bit IDs only;
 /// extended frames bypass it ("a 29-bit index would be out of range").
 ///
@@ -137,7 +143,7 @@ fn bit_field_filter_domain_is_standard_ids_only() {
     assert!(!filter.matches(extended_raw));
 }
 
-/// Upstream drift `1a11d135`: both receive paths clamp wire DLC values 9..15
+/// Upstream baseline `1a11d135`: both receive paths clamp wire DLC values 9..15
 /// to 8 data bytes for classic CAN ("Classic CAN allows DLC 9-15 on the wire
 /// (all mean 8 data bytes); clamp to the payload buffer size").
 ///
@@ -153,7 +159,7 @@ fn classic_dlc_nine_to_fifteen_clamp_to_eight_bytes() {
     assert_eq!(dlc_to_length(16, false), None);
 }
 
-/// Upstream drift `6cafa673` ("Fix logger to work for extended canId"): the
+/// Upstream baseline `6cafa673` ("Fix logger to work for extended canId"): the
 /// POSIX transceiver logged the raw encoded id word, so extended frames
 /// printed with the embedded extended-qualifier flag set; the fix routes the
 /// value through `CanId::rawId()`.
@@ -172,7 +178,7 @@ fn extended_id_raw_value_strips_qualifier_bits_for_display() {
     assert_eq!(base.value(), base.raw_id());
 }
 
-/// Upstream drift `1a11d135`/`be0029bb`: on TX-path saturation the adapters
+/// Upstream baseline `1a11d135`/`be0029bb`: on TX-path saturation the adapters
 /// increment an overrun counter and return `CAN_ERR_TX_HW_QUEUE_FULL`; when
 /// the transceiver is not OPEN (or muted) writes return `CAN_ERR_TX_OFFLINE`.
 ///
